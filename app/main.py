@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -52,7 +53,9 @@ app.add_middleware(
 )
 
 # Static Files
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+static_dir = BASE_DIR / "static"
+os.makedirs(static_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Include Routers
 app.include_router(auth_router)
