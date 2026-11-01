@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}دليل وشجرة الحسابات (COA){% endblock %}
+
+{% block content %}
+<div x-data="{
+    accounts: [],
+    loading: true,
+    searchQuery: '',
+    typeFilter: 'ALL',
+
+    // Modal state for Create / Edit Account
+    modal: {
+        show: false,
+        isEdit: false,
+        id: null,
+        code: '',
+        name: '',
+        name_ar: '',
+        type: 'ASSET',
+        category: 'CURRENT_ASSET',
+        parent_id: '',
+        is_active: true,
+        saving: false
+    },
+
+    async loadAccounts() {
+        this.loading = true;
+        try {
+            const res = await fetch('/accounting/api/accounts');
+            if (res.ok) this.accounts = await res.json();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    },
+
+    get filteredAccounts() {
+        return this.accounts.filter(a => {
+            const matchSearch = !this.searchQuery || 
+                a.code.includes(this.searchQuery) ||
+                a.name_ar.includes(this.searchQuery) ||
+                a.name.toLowerCase().includes(this.searchQuery.toLowerCase());
+            const matchType = this.typeFilter === 'ALL' || a.type === this.typeFilter;
+            return matchSearch && matchType;
+        });
+    },
+
+    openCreate() {
+        this.modal = {
+            show: true,
+            isEdit: false,
+            id: null,
+            code: '',
+            name: '',
+            name_ar: '',
+            type: 'ASSET',
+            category: 'CURRENT_ASSET',
+            parent_id: '',
+            is_active: true,
+            saving: false
+        };
+    },
+
+    openEdit(a) {
+        this.modal = {
+            show: true,
+            isEdit: true,
+            id: a.id,
+            code: a.code,
+            name: a.name,
+            name_ar: a.name_ar,
+            type: a.type,
+            category: a.category,
+            parent_id: a.parent_id || '',
+            is_active: a.is_active,
+            saving: false
+        };
+    },
+
+    async saveAccount() {
+        if (!this.modal.code || !this.modal.name_ar) {
+            showToast('يرجى إدخال رقم واسم الحساب', 'error');
+            return;
+        }
+        this.modal.saving = true;
+        try {
+            const url = this.modal.isEdit ? `/accounting/api/accounts/${this.modal.id}` : '/accounting/api/accounts';
+            const method = this.modal.isEdit ? 'PUT' : 'POST';
+            const res = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.modal)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(this.modal.isEdit ? 'تم تحديث الحساب بنجاح' : 'تمت إضافة الحساب الجديد بنجاح');
+                this.modal.show = false;
+                this.loadAccounts();
+            } else {
+                showToast(data.detail || 'حدث خطأ أثناء الحفظ', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        } finally {
+            this.modal.saving = false;
+        }
+    },
+
+    async deleteAccount(id, name) {
+        if (!confirm(`هل أنت متأكد من حذف أو تعطيل الحساب: ${name}؟`)) return;
+        try {
+            const res = await fetch(`/accounting/api/accounts/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(data.message || 'تم حذف الحساب بنجاح');
+                this.loadAccounts();
+            } else {
+                showToast(data.detail || 'فشل حذف الحساب', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        }
+    }
+}" x-init="loadAccounts()">
+
+    <!-- Odoo Control Panel -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+                <nav class="flex items-center space-x-reverse space-x-1.5 text-xs text-slate-500 mb-1">
+                    <a href="/dashboard" class="hover:text-odoo-purple transition">الرئيسية</a>
+                    <span>/</span>
+                    <span class="text-slate-400">الحسابات العامة</span>
+                    <span>/</span>
+                    <span class="text-odoo-purple font-bold">شجرة ودليل الحسابات (COA)</span>
+                </nav>
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <h1 class="text-xl font-bold text-slate-900">شجرة ودليل الحسابات المعتمد (Chart of Accounts)</h1>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-odoo-purple font-mono" x-text="filteredAccounts.length + ' حساب'"></span>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <button @click="openCreate()" class="odoo-btn-primary px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition flex items-center">
+                    <i class="fa-solid fa-plus ml-1.5"></i>
+                    <span>إضافة حساب جديد</span>
+                </button>
+                <a href="/accounting/api/coa/export" class="inline-flex items-center px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition">
+                    <i class="fa-solid fa-file-excel ml-1.5"></i>
+                    <span>تصدير Excel</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <div class="relative w-64">
+                <input type="text" x-model="searchQuery" placeholder="بحث برقم الحساب أو الاسم..."
+                       class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs">
+                <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400"></i>
+            </div>
+            <select x-model="typeFilter" class="py-1.5 px-3 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white">
+                <option value="ALL">جميع الأنواع</option>
+                <option value="ASSET">الأصول (Assets #1000)</option>
+                <option value="LIABILITY">الخصوم والالتزامات (Liabilities #2000)</option>
+                <option value="EQUITY">حقوق الملكية (Equity #3000)</option>
+                <option value="REVENUE">الإيرادات والمبيعات (Revenues #4000)</option>
+                <option value="EXPENSE">المصروفات والتكاليف (Expenses #5000)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Accounts Table -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 text-slate-600 border-b border-slate-200 font-bold">
+                    <tr>
+                        <th class="py-3 px-4 w-28">رقم الحساب</th>
+                        <th class="py-3 px-4">اسم الحساب بالعربية</th>
+                        <th class="py-3 px-4 font-mono">اسم الحساب (English)</th>
+                        <th class="py-3 px-4">النوع الأساسي</th>
+                        <th class="py-3 px-4">التصنيف المحاسبي</th>
+                        <th class="py-3 px-4 text-center">كشف الحساب</th>
+                        <th class="py-3 px-4 text-center">الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-mono">
+                    <template x-if="loading">
+                        <tr><td colspan="7" class="py-12 text-center text-slate-400 font-sans">جاري تحميل شجرة الحسابات...</td></tr>
+                    </template>
+                    <template x-if="!loading && filteredAccounts.length === 0">
+                        <tr><td colspan="7" class="py-8 text-center text-slate-400 font-sans">لا توجد حسابات مطابقة</td></tr>
+                    </template>
+                    <template x-if="!loading && filteredAccounts.length > 0">
+                        <template x-for="a in filteredAccounts" :key="a.id">
+                            <tr class="hover:bg-slate-50 transition"
+                                :class="a.code.endsWith('000') ? 'bg-purple-50/40 font-bold text-slate-900' : (a.code.endsWith('00') ? 'bg-slate-50/70 font-semibold' : '')">
+                                <td class="py-3 px-4 font-bold text-odoo-purple" x-text="a.code"></td>
+                                <td class="py-3 px-4 font-sans font-bold text-slate-900" x-text="a.name_ar"></td>
+                                <td class="py-3 px-4 text-slate-500" x-text="a.name"></td>
+                                <td class="py-3 px-4 font-sans">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                                          :class="{
+                                              'bg-emerald-100 text-emerald-800': a.type === 'ASSET',
+                                              'bg-rose-100 text-rose-800': a.type === 'LIABILITY',
+                                              'bg-purple-100 text-purple-800': a.type === 'EQUITY',
+                                              'bg-blue-100 text-blue-800': a.type === 'REVENUE',
+                                              'bg-amber-100 text-amber-800': a.type === 'EXPENSE'
+                                          }"
+                                          x-text="a.type"></span>
+                                </td>
+                                <td class="py-3 px-4 font-sans text-slate-600" x-text="a.category"></td>
+                                <td class="py-3 px-4 text-center font-sans">
+                                    <a :href="'/accounting/general-ledger?account_id=' + a.id" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-purple-100 text-odoo-purple font-bold text-[11px] transition">
+                                        دفتر الأستاذ
+                                    </a>
+                                </td>
+                                <td class="py-3 px-4 text-center">
+                                    <div class="flex items-center justify-center space-x-reverse space-x-1.5">
+                                        <button @click="openEdit(a)" class="p-1.5 text-odoo-purple hover:bg-purple-50 rounded" title="تعديل"><i class="fa-solid fa-pen-to-square"></i></button>
+                                        <button @click="deleteAccount(a.id, a.name_ar)" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded" title="حذف"><i class="fa-solid fa-trash"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Create / Edit Account Modal -->
+    <div x-cloak x-show="modal.show" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden text-right" @click.outside="modal.show = false">
+            <div class="bg-odoo-purple text-white px-6 py-4 flex items-center justify-between">
+                <h3 class="font-bold text-base" x-text="modal.isEdit ? 'تعديل الحساب: ' + modal.name_ar : 'إضافة حساب جديد لدليل الحسابات'"></h3>
+                <button @click="modal.show = false" class="text-white/80 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form @submit.prevent="saveAccount()" class="p-6 space-y-4 text-xs text-slate-800">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">رقم الحساب (Code):</label>
+                        <input type="text" x-model="modal.code" :disabled="modal.isEdit" required placeholder="مثال: 1115" class="w-full p-2 border border-slate-300 rounded-lg font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">نوع الحساب (Account Type):</label>
+                        <select x-model="modal.type" class="w-full p-2 border border-slate-300 rounded-lg bg-white">
+                            <option value="ASSET">أصول (Asset)</option>
+                            <option value="LIABILITY">خصوم / التزامات (Liability)</option>
+                            <option value="EQUITY">حقوق ملكية (Equity)</option>
+                            <option value="REVENUE">إيرادات (Revenue)</option>
+                            <option value="EXPENSE">مصروفات (Expense)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">اسم الحساب بالعربية:</label>
+                        <input type="text" x-model="modal.name_ar" placeholder="مثال: عهدة المعرض النقدية" required class="w-full p-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">اسم الحساب بالإنجليزية:</label>
+                        <input type="text" x-model="modal.name" placeholder="Showroom Cash Petty" class="w-full p-2 border border-slate-300 rounded-lg font-mono">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">التصنيف التفصيلي للقوائم المالية:</label>
+                    <select x-model="modal.category" class="w-full p-2 border border-slate-300 rounded-lg bg-white">
+                        <option value="CURRENT_ASSET">أصول متداولة (Current Assets)</option>
+                        <option value="NON_CURRENT_ASSET">أصول ثابتة (Fixed Assets)</option>
+                        <option value="INVENTORY">مخزون سلعي (Inventory)</option>
+                        <option value="RECEIVABLE">عملاء ومدينون (Receivables)</option>
+                        <option value="CURRENT_LIABILITY">التزامات متداولة (Current Liabilities)</option>
+                        <option value="PAYABLE">موردون ودائنون (Payables)</option>
+                        <option value="EQUITY">حقوق ملكية ورأس مال (Equity)</option>
+                        <option value="TRADING_REVENUE">إيرادات نشاط ومبيعات (Revenue)</option>
+                        <option value="COGS">تكلفة بضاعة مباعة (COGS)</option>
+                        <option value="EXPENSE">مصروفات عمومية وتشغيل (Operating Expenses)</option>
+                    </select>
+                </div>
+
+                <div class="pt-3 border-t border-slate-200 flex justify-between">
+                    <button type="button" @click="modal.show = false" class="px-4 py-2 border border-slate-300 rounded-lg font-bold">إلغاء</button>
+                    <button type="submit" :disabled="modal.saving" class="px-5 py-2 odoo-btn-primary font-bold rounded-lg shadow">حفظ الحساب</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

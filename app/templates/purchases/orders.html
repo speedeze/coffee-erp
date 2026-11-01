@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+
+{% block title %}شحنات وأوامر الشراء والاستيراد{% endblock %}
+
+{% block content %}
+<div x-data="{
+    orders: [],
+    suppliers: [],
+    rawItems: [],
+    loading: true,
+    viewMode: 'list', // 'list' | 'kanban'
+    searchQuery: '',
+    statusFilter: 'ALL',
+
+    // Create Modal state
+    modal: {
+        show: false,
+        date: new Date().toISOString().split('T')[0],
+        supplier_id: '',
+        bill_of_lading: '',
+        currency: 'USD',
+        exchange_rate: 1.0,
+        notes: '',
+        items: [
+            { item_id: '', quantity: 1000, uom_id: 1, unit_price: 6.50 }
+        ],
+        landed_costs: [
+            { cost_type: 'OCEAN_FREIGHT', cost_type_ar: 'نولون الشحن البحري', amount: 800, vendor_name: 'Maersk Line', allocation_method: 'WEIGHT', notes: '' },
+            { cost_type: 'CUSTOMS', cost_type_ar: 'رسوم الجمارك والتعريفة', amount: 450, vendor_name: 'مصلحة الجمارك', allocation_method: 'WEIGHT', notes: '' }
+        ],
+        saving: false
+    },
+
+    async initData() {
+        this.loading = true;
+        try {
+            const [ordersRes, suppRes, itemRes] = await Promise.all([
+                fetch('/purchases/api/orders'),
+                fetch('/purchases/api/suppliers'),
+                fetch('/inventory/api/items?category=RAW_COFFEE')
+            ]);
+            if (ordersRes.ok) this.orders = await ordersRes.json();
+            if (suppRes.ok) this.suppliers = await suppRes.json();
+            if (itemRes.ok) this.rawItems = await itemRes.json();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    },
+
+    get filteredOrders() {
+        return this.orders.filter(o => {
+            const matchSearch = !this.searchQuery || 
+                o.order_number.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                (o.supplier && o.supplier.name_ar.includes(this.searchQuery)) ||
+                (o.bill_of_lading && o.bill_of_lading.toLowerCase().includes(this.searchQuery.toLowerCase()));
+            const matchStatus = this.statusFilter === 'ALL' || o.status === this.statusFilter;
+            return matchSearch && matchStatus;
+        });
+    },
+
+    addItemRow() {
+        this.modal.items.push({ item_id: '', quantity: 500, uom_id: 1, unit_price: 6.00 });
+    },
+
+    removeItemRow(idx) {
+        if (this.modal.items.length > 1) this.modal.items.splice(idx, 1);
+    },
+
+    addLandedRow() {
+        this.modal.landed_costs.push({ cost_type: 'TRANSPORT', cost_type_ar: 'نقل داخلي وتعتيق', amount: 200, vendor_name: 'شركة النقل البري', allocation_method: 'WEIGHT', notes: '' });
+    },
+
+    removeLandedRow(idx) {
+        this.modal.landed_costs.splice(idx, 1);
+    },
+
+    get totalFob() {
+        return this.modal.items.reduce((s, i) => s + ((parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0)), 0);
+    },
+
+    get totalLanded() {
+        return this.modal.landed_costs.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
+    },
+
+    openCreate() {
+        this.modal.show = true;
+    },
+
+    async createOrder() {
+        if (!this.modal.supplier_id) {
+            showToast('يرجى اختيار المورد أولاً', 'error');
+            return;
+        }
+        this.modal.saving = true;
+        try {
+            const res = await fetch('/purchases/api/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.modal)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(`تم إنشاء أمر الشراء والاستيراد ${data.order_number} بنجاح`);
+                this.modal.show = false;
+                this.initData();
+            } else {
+                showToast(data.detail || 'حدث خطأ أثناء الإنشاء', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        } finally {
+            this.modal.saving = false;
+        }
+    },
+
+    async receiveShipment(id, orderNum) {
+        if (!confirm(`هل أنت متأكد من تفريغ واستلام الشحنة ${orderNum} وتوزيع التكاليف المضافة على البن وتوليد القيد الآلي؟`)) return;
+        try {
+            const res = await fetch(`/purchases/api/orders/${id}/receive`, { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(`تم استلام الشحنة وتوزيع التكاليف وترحيل القيد المحاسبي بنجاح!`);
+                this.initData();
+            } else {
+                showToast(data.detail || 'فشل استلام الشحنة', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        }
+    },
+
+    async deleteOrder(id, orderNum) {
+        if (!confirm(`هل أنت متأكد من حذف أمر الشراء المسودة رقم ${orderNum}؟`)) return;
+        try {
+            const res = await fetch(`/purchases/api/orders/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                showToast('تم حذف الأمر بنجاح');
+                this.initData();
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        }
+    }
+}" x-init="initData()">
+
+    <!-- Odoo Control Panel -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+                <nav class="flex items-center space-x-reverse space-x-1.5 text-xs text-slate-500 mb-1">
+                    <a href="/dashboard" class="hover:text-odoo-purple transition">الرئيسية</a>
+                    <span>/</span>
+                    <span class="text-slate-400">المشتريات والاستيراد</span>
+                    <span>/</span>
+                    <span class="text-odoo-purple font-bold">أوامر الشراء وشحنات البن</span>
+                </nav>
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <h1 class="text-xl font-bold text-slate-900">سجل شحنات الاستيراد وتوزيع التكاليف (Landed Costs)</h1>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-900 font-mono" x-text="filteredOrders.length + ' شحنة'"></span>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <button @click="openCreate()" class="odoo-btn-primary px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition flex items-center">
+                    <i class="fa-solid fa-plus ml-1.5"></i>
+                    <span>أمر شراء / شحنة جديدة</span>
+                </button>
+                <a href="/purchases/api/orders/export" class="inline-flex items-center px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition">
+                    <i class="fa-solid fa-file-excel ml-1.5"></i>
+                    <span>تصدير Excel</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="relative w-64">
+                    <input type="text" x-model="searchQuery" placeholder="بحث برقم الشحنة، المورد، بوليصة الشحن..."
+                           class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs">
+                    <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400"></i>
+                </div>
+                <select x-model="statusFilter" class="py-1.5 px-3 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white">
+                    <option value="ALL">جميع الحالات</option>
+                    <option value="DRAFT">مسودات (قيد الشحن)</option>
+                    <option value="RECEIVED">تم الاستلام والتفريغ بالمستودع</option>
+                </select>
+            </div>
+
+            <div class="flex items-center border border-slate-300 rounded-lg overflow-hidden bg-slate-50 p-0.5">
+                <button @click="viewMode = 'list'" :class="viewMode === 'list' ? 'bg-white shadow-sm text-odoo-purple font-bold' : 'text-slate-500'" class="px-2.5 py-1 text-xs rounded">
+                    <i class="fa-solid fa-list ml-1"></i> عرض قائمة
+                </button>
+                <button @click="viewMode = 'kanban'" :class="viewMode === 'kanban' ? 'bg-white shadow-sm text-odoo-purple font-bold' : 'text-slate-500'" class="px-2.5 py-1 text-xs rounded">
+                    <i class="fa-solid fa-table-cells-large ml-1"></i> عرض كانبان
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. List View -->
+    <div x-show="viewMode === 'list'" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 text-slate-600 border-b border-slate-200 font-bold">
+                    <tr>
+                        <th class="py-3 px-4">رقم الشحنة</th>
+                        <th class="py-3 px-4">التاريخ</th>
+                        <th class="py-3 px-4">المورد الدولي / المحلي</th>
+                        <th class="py-3 px-4 font-mono">بوليصة الشحن B/L</th>
+                        <th class="py-3 px-4 font-mono text-left">قيمة البضاعة FOB</th>
+                        <th class="py-3 px-4 font-mono text-left">المصاريف الإضافية</th>
+                        <th class="py-3 px-4 font-mono text-left text-slate-900">التكلفة الواصلة الفعلية</th>
+                        <th class="py-3 px-4 text-center">الحالة</th>
+                        <th class="py-3 px-4 text-center">الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-mono">
+                    <template x-if="loading">
+                        <tr><td colspan="9" class="py-12 text-center text-slate-400 font-sans">جاري تحميل الشحنات...</td></tr>
+                    </template>
+                    <template x-if="!loading && filteredOrders.length === 0">
+                        <tr><td colspan="9" class="py-8 text-center text-slate-400 font-sans">لا توجد أوامر شراء مسجلة</td></tr>
+                    </template>
+                    <template x-if="!loading && filteredOrders.length > 0">
+                        <template x-for="o in filteredOrders" :key="o.id">
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="py-3 px-4 font-bold text-cyan-900" x-text="o.order_number"></td>
+                                <td class="py-3 px-4 text-slate-500" x-text="o.date"></td>
+                                <td class="py-3 px-4 font-sans font-bold text-slate-900" x-text="o.supplier ? o.supplier.name_ar : '-'"></td>
+                                <td class="py-3 px-4 text-slate-600" x-text="o.bill_of_lading || '-'"></td>
+                                <td class="py-3 px-4 text-left" x-text="'$' + (o.total_fob_amount || 0).toFixed(2)"></td>
+                                <td class="py-3 px-4 text-left text-amber-700 font-bold" x-text="'$' + (o.total_landed_costs || 0).toFixed(2)"></td>
+                                <td class="py-3 px-4 text-left font-extrabold text-slate-900" x-text="'$' + (o.total_actual_cost || 0).toFixed(2)"></td>
+                                <td class="py-3 px-4 text-center font-sans">
+                                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold"
+                                          :class="o.status === 'RECEIVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-cyan-100 text-cyan-900'"
+                                          x-text="o.status === 'RECEIVED' ? 'تم الاستلام والتفريغ' : 'مسودة'"></span>
+                                </td>
+                                <td class="py-3 px-4 text-center font-sans">
+                                    <template x-if="o.status === 'DRAFT'">
+                                        <div class="flex items-center justify-center space-x-reverse space-x-1">
+                                            <button @click="receiveShipment(o.id, o.order_number)" class="px-2.5 py-1 bg-cyan-700 hover:bg-cyan-800 text-white rounded font-bold text-[11px] shadow">
+                                                تفريغ واستلام
+                                            </button>
+                                            <button @click="deleteOrder(o.id, o.order_number)" class="p-1 text-rose-600 hover:bg-rose-50 rounded">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </template>
+                                    <template x-if="o.status === 'RECEIVED'">
+                                        <a href="/accounting/journal-entries" class="text-xs font-mono font-bold text-odoo-purple hover:underline">
+                                            قيد #<span x-text="o.journal_entry_id"></span>
+                                        </a>
+                                    </template>
+                                </td>
+                            </tr>
+                        </template>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 2. Kanban View -->
+    <div x-show="viewMode === 'kanban'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="o in filteredOrders" :key="o.id">
+            <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-mono text-xs font-bold text-cyan-900" x-text="o.order_number"></span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                              :class="o.status === 'RECEIVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-cyan-100 text-cyan-800'"
+                              x-text="o.status === 'RECEIVED' ? 'مستلم بالمخزن' : 'مسودة'"></span>
+                    </div>
+                    <h3 class="font-bold text-slate-900 text-sm" x-text="o.supplier ? o.supplier.name_ar : '-'"></h3>
+                    <div class="text-xs text-slate-400 font-mono mb-3" x-text="'بوليصة: ' + (o.bill_of_lading || '-')"></div>
+                    <div class="space-y-1 text-xs text-slate-600 border-t border-slate-100 pt-2 font-mono">
+                        <div class="flex justify-between">
+                            <span class="font-sans text-slate-400">قيمة FOB:</span>
+                            <span x-text="'$' + (o.total_fob_amount || 0).toFixed(2)"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-sans text-slate-400">مصاريف شحن وجمارك:</span>
+                            <span class="text-amber-700 font-bold" x-text="'$' + (o.total_landed_costs || 0).toFixed(2)"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-sans text-slate-400">التكلفة الواصلة الكلية:</span>
+                            <span class="font-bold text-slate-900" x-text="'$' + (o.total_actual_cost || 0).toFixed(2)"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-[10px] text-slate-400 font-sans">مستودع الوجهة: WH-RAW</span>
+                    <div>
+                        <template x-if="o.status === 'DRAFT'">
+                            <button @click="receiveShipment(o.id, o.order_number)" class="px-3 py-1 bg-cyan-700 text-white rounded font-bold text-xs hover:bg-cyan-800 transition">
+                                تفريغ واستلام
+                            </button>
+                        </template>
+                        <template x-if="o.status === 'RECEIVED'">
+                            <span class="text-xs font-bold text-emerald-600"><i class="fa-solid fa-check ml-1"></i> بالمستودع</span>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Create Order Modal -->
+    <div x-cloak x-show="modal.show" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden text-right" @click.outside="modal.show = false">
+            <div class="bg-cyan-900 text-white px-6 py-4 flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-base">إنشاء أمر شراء واستيراد بن خام مع توزيع التكاليف</h3>
+                    <p class="text-[11px] text-cyan-200 mt-0.5">تسجيل فاتورة الشحن وتوزيع النولون والجمارك على تكلفة الكيلو</p>
+                </div>
+                <button @click="modal.show = false" class="text-white/80 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <form @submit.prevent="createOrder()" class="p-6 space-y-4 text-xs text-slate-800">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">المورد:</label>
+                        <select x-model="modal.supplier_id" required class="w-full p-2 border border-slate-300 rounded-lg bg-white font-bold">
+                            <option value="">-- اختر المورد --</option>
+                            <template x-for="s in suppliers" :key="s.id">
+                                <option :value="s.id" x-text="s.name_ar + ' (' + s.country + ')'"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">رقم بوليصة الشحن (B/L):</label>
+                        <input type="text" x-model="modal.bill_of_lading" placeholder="MSK-2026-XXXX" class="w-full p-2 border border-slate-300 rounded-lg font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">تاريخ الطلب:</label>
+                        <input type="date" x-model="modal.date" required class="w-full p-2 border border-slate-300 rounded-lg font-mono">
+                    </div>
+                </div>
+
+                <!-- Coffee Beans Items -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden mt-3">
+                    <div class="bg-slate-100 p-2 font-bold flex justify-between items-center">
+                        <span>أصناف البن الأخضر المتعاقد عليها (FOB):</span>
+                        <button type="button" @click="addItemRow()" class="px-2 py-1 bg-cyan-800 text-white rounded text-[11px] font-bold">+ إضافة صنف</button>
+                    </div>
+                    <table class="w-full text-right text-xs">
+                        <thead class="bg-slate-50 text-slate-600">
+                            <tr>
+                                <th class="p-2">صنف البن الخام</th>
+                                <th class="p-2 w-28">الوزن (كجم)</th>
+                                <th class="p-2 w-32">سعر FOB للكيلو ($)</th>
+                                <th class="p-2 w-32">المجموع</th>
+                                <th class="p-2 w-10 text-center">حذف</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <template x-for="(row, idx) in modal.items" :key="idx">
+                                <tr>
+                                    <td class="p-2">
+                                        <select x-model="row.item_id" required class="w-full p-1.5 border border-slate-300 rounded bg-white">
+                                            <option value="">-- اختر البن الخام --</option>
+                                            <template x-for="itm in rawItems" :key="itm.id">
+                                                <option :value="itm.id" x-text="itm.name_ar + ' (' + itm.sku + ')'"></option>
+                                            </template>
+                                        </select>
+                                    </td>
+                                    <td class="p-2"><input type="number" step="10" x-model="row.quantity" class="w-full p-1.5 border border-slate-300 rounded font-mono text-center"></td>
+                                    <td class="p-2"><input type="number" step="0.1" x-model="row.unit_price" class="w-full p-1.5 border border-slate-300 rounded font-mono text-left"></td>
+                                    <td class="p-2 font-bold font-mono text-slate-900" x-text="'$' + ((row.quantity * row.unit_price) || 0).toFixed(2)"></td>
+                                    <td class="p-2 text-center"><button type="button" @click="removeItemRow(idx)" class="text-rose-500"><i class="fa-solid fa-trash"></i></button></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Landed Cost Elements -->
+                <div class="border border-amber-200 rounded-xl overflow-hidden mt-3 bg-amber-50/30">
+                    <div class="bg-amber-100/80 p-2 font-bold text-amber-900 flex justify-between items-center">
+                        <span>المصاريف والتكاليف المضافة (نولون الشحن، الجمارك، التخليص):</span>
+                        <button type="button" @click="addLandedRow()" class="px-2 py-1 bg-amber-700 text-white rounded text-[11px] font-bold">+ إضافة مصروف</button>
+                    </div>
+                    <table class="w-full text-right text-xs">
+                        <thead class="bg-amber-50 text-slate-600">
+                            <tr>
+                                <th class="p-2">نوع المصروف المضاف</th>
+                                <th class="p-2 w-36">المبلغ ($)</th>
+                                <th class="p-2">مقدم الخدمة / الميناء</th>
+                                <th class="p-2 w-10 text-center">حذف</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-amber-100 font-mono">
+                            <template x-for="(lc, idx) in modal.landed_costs" :key="idx">
+                                <tr>
+                                    <td class="p-2"><input type="text" x-model="lc.cost_type_ar" class="w-full p-1.5 border border-slate-300 rounded font-sans"></td>
+                                    <td class="p-2"><input type="number" step="10" x-model="lc.amount" class="w-full p-1.5 border border-slate-300 rounded font-mono text-left"></td>
+                                    <td class="p-2"><input type="text" x-model="lc.vendor_name" class="w-full p-1.5 border border-slate-300 rounded font-sans"></td>
+                                    <td class="p-2 text-center"><button type="button" @click="removeLandedRow(idx)" class="text-rose-500"><i class="fa-solid fa-trash"></i></button></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Total Summary -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex justify-between font-mono text-xs">
+                    <div><span class="font-sans text-slate-500">قيمة البضاعة FOB: </span><strong x-text="'$' + totalFob.toFixed(2)"></strong></div>
+                    <div><span class="font-sans text-slate-500">التكاليف المضافة: </span><strong class="text-amber-700" x-text="'$' + totalLanded.toFixed(2)"></strong></div>
+                    <div><span class="font-sans text-slate-500">إجمالي التكلفة الفعلية الواصلة: </span><strong class="text-emerald-700 text-sm" x-text="'$' + (totalFob + totalLanded).toFixed(2)"></strong></div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-200 flex justify-between">
+                    <button type="button" @click="modal.show = false" class="px-4 py-2 border border-slate-300 rounded-lg font-bold">إلغاء</button>
+                    <button type="submit" :disabled="modal.saving" class="px-5 py-2 bg-cyan-800 hover:bg-cyan-900 text-white font-bold rounded-lg shadow">تأكيد أمر الشراء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

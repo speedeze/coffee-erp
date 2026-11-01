@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}لوحة التحكم الرئيسية{% endblock %}
+
+{% block content %}
+<div x-data="{
+    metrics: null,
+    loading: true,
+    async loadMetrics() {
+        this.loading = true;
+        try {
+            const res = await fetch('/api/dashboard/metrics');
+            if (res.ok) this.metrics = await res.json();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    }
+}" x-init="loadMetrics()">
+
+    <!-- Odoo-Style Page Header -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+                <nav class="flex items-center space-x-reverse space-x-1.5 text-xs text-slate-500 mb-1">
+                    <span class="text-odoo-purple font-bold">لوحة المعلومات التنفيذية</span>
+                </nav>
+                <h1 class="text-xl font-bold text-slate-900">نظام إدارة وتصنيع القهوة (CoffeeRoast ERP)</h1>
+            </div>
+
+            <!-- Quick Action Shortcuts -->
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+                <a href="/sales/invoices" class="inline-flex items-center px-3 py-1.5 rounded-lg font-bold bg-purple-50 text-odoo-purple hover:bg-purple-100 transition border border-purple-200">
+                    <i class="fa-solid fa-plus ml-1.5"></i> فاتورة مبيعات
+                </a>
+                <a href="/manufacturing/roasting" class="inline-flex items-center px-3 py-1.5 rounded-lg font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 transition border border-amber-200">
+                    <i class="fa-solid fa-fire-burner ml-1.5"></i> أمر تحميص
+                </a>
+                <a href="/purchases/orders" class="inline-flex items-center px-3 py-1.5 rounded-lg font-bold bg-cyan-50 text-cyan-800 hover:bg-cyan-100 transition border border-cyan-200">
+                    <i class="fa-solid fa-ship ml-1.5"></i> شحنة بن خام
+                </a>
+                <button @click="loadMetrics()" class="p-1.5 border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-600 transition" title="تحديث">
+                    <i class="fa-solid fa-arrows-rotate" :class="loading ? 'fa-spin' : ''"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Metric Cards Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+        
+        <!-- Total Inventory Valuation -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+            <div>
+                <div class="text-xs font-bold text-slate-400">إجمالي تقييم المخزون (5 مستودعات)</div>
+                <div class="text-2xl font-extrabold text-slate-900 font-mono mt-1" 
+                     x-text="metrics ? '$' + metrics.total_inventory_value.toLocaleString('en-US', {minimumFractionDigits: 2}) : '$0.00'"></div>
+                <div class="text-[11px] text-emerald-600 font-bold mt-1">
+                    <i class="fa-solid fa-boxes-stacked ml-1"></i> بن خام ومحمص وعبوات
+                </div>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-purple-100 text-odoo-purple flex items-center justify-center text-xl shadow-sm">
+                <i class="fa-solid fa-warehouse"></i>
+            </div>
+        </div>
+
+        <!-- Total Wholesale Sales -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+            <div>
+                <div class="text-xs font-bold text-slate-400">إجمالي مبيعات الجملة المعتمدة</div>
+                <div class="text-2xl font-extrabold text-slate-900 font-mono mt-1" 
+                     x-text="metrics ? '$' + metrics.total_sales.toLocaleString('en-US', {minimumFractionDigits: 2}) : '$0.00'"></div>
+                <div class="text-[11px] text-purple-700 font-bold mt-1">
+                    <i class="fa-solid fa-receipt ml-1"></i> مقاهي وموزعين
+                </div>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl shadow-sm">
+                <i class="fa-solid fa-file-invoice-dollar"></i>
+            </div>
+        </div>
+
+        <!-- Total Receivables Due -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+            <div>
+                <div class="text-xs font-bold text-slate-400">مستحقات وديون العملاء (الذمم المدينة)</div>
+                <div class="text-2xl font-extrabold text-rose-700 font-mono mt-1" 
+                     x-text="metrics ? '$' + metrics.total_receivables.toLocaleString('en-US', {minimumFractionDigits: 2}) : '$0.00'"></div>
+                <div class="text-[11px] text-amber-700 font-bold mt-1">
+                    <i class="fa-solid fa-clock-rotate-left ml-1"></i> قيد التحصيل
+                </div>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center text-xl shadow-sm">
+                <i class="fa-solid fa-hand-holding-dollar"></i>
+            </div>
+        </div>
+
+        <!-- Roasting Engine Output -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+            <div>
+                <div class="text-xs font-bold text-slate-400">أوامر التحميص المنجزة</div>
+                <div class="text-2xl font-extrabold text-amber-800 font-mono mt-1">
+                    <span x-text="metrics ? metrics.completed_roasts : 0"></span>
+                    <span class="text-xs font-sans text-slate-400 font-normal">/ <span x-text="metrics ? metrics.total_roasts : 0"></span> أمر</span>
+                </div>
+                <div class="text-[11px] text-amber-700 font-bold mt-1">
+                    <i class="fa-solid fa-percent ml-1"></i> احتساب تلقائي لفاقد الرطوبة
+                </div>
+            </div>
+            <div class="w-12 h-12 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-xl shadow-sm">
+                <i class="fa-solid fa-fire-burner"></i>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Stock Quantities Breakdown Banner -->
+    <div class="bg-gradient-to-r from-odoo-purple to-slate-900 rounded-xl p-4 text-white shadow-md mb-5">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <div class="text-xs font-bold text-amber-300 uppercase tracking-wider">مستويات الأرصدة الحالية في المستودعات</div>
+                <div class="text-base font-bold mt-0.5">تتبع فوري للأوزان ومخزون حبوب البن والمنتج التام</div>
+            </div>
+            <div class="flex flex-wrap items-center gap-4 text-xs font-mono">
+                <div class="bg-white/10 px-3 py-2 rounded-lg border border-white/10">
+                    <div class="text-slate-300 text-[10px]">البن الأخضر الخام (WH-RAW)</div>
+                    <div class="text-base font-bold text-amber-300 mt-0.5" x-text="metrics ? metrics.raw_beans_kg.toLocaleString() + ' كجم' : '0 كجم'"></div>
+                </div>
+                <div class="bg-white/10 px-3 py-2 rounded-lg border border-white/10">
+                    <div class="text-slate-300 text-[10px]">البن المحمص والمطحون (WH-ROAST)</div>
+                    <div class="text-base font-bold text-amber-400 mt-0.5" x-text="metrics ? metrics.roasted_coffee_kg.toLocaleString() + ' كجم' : '0 كجم'"></div>
+                </div>
+                <div class="bg-white/10 px-3 py-2 rounded-lg border border-white/10">
+                    <div class="text-slate-300 text-[10px]">المنتجات التامة المعبأة (WH-FG)</div>
+                    <div class="text-base font-bold text-emerald-300 mt-0.5" x-text="metrics ? metrics.finished_goods_units.toLocaleString() + ' عبوة' : '0 عبوة'"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activities Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        <!-- Recent Roasting Batches -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <i class="fa-solid fa-fire-burner text-amber-600"></i>
+                    <h2 class="font-bold text-sm text-slate-800">أحدث عمليات التحميص واحتساب الهالك</h2>
+                </div>
+                <a href="/manufacturing/roasting" class="text-xs text-odoo-purple hover:underline font-bold">عرض الكل</a>
+            </div>
+            
+            <div class="divide-y divide-slate-100 text-xs">
+                <template x-if="metrics && metrics.recent_roasts.length > 0">
+                    <template x-for="roast in metrics.recent_roasts" :key="roast.id">
+                        <div class="py-2.5 flex items-center justify-between">
+                            <div>
+                                <div class="font-bold text-slate-900" x-text="roast.order_number"></div>
+                                <div class="text-slate-500 text-[11px]" x-text="roast.raw_item ? roast.raw_item.name_ar : 'بن خام'"></div>
+                            </div>
+                            <div class="text-left font-mono">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                                      :class="roast.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'"
+                                      x-text="roast.status === 'COMPLETED' ? 'مكتمل' : 'مسودة'"></span>
+                                <div class="text-[11px] text-slate-600 mt-1" x-text="roast.actual_shrinkage_pct ? 'هالك: ' + roast.actual_shrinkage_pct + '%' : 'مدخل: ' + roast.raw_quantity_kg + ' كجم'"></div>
+                            </div>
+                        </div>
+                    </template>
+                </template>
+            </div>
+        </div>
+
+        <!-- Recent Double-Entry Journal Entries -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <i class="fa-solid fa-book-journal-whills text-odoo-purple"></i>
+                    <h2 class="font-bold text-sm text-slate-800">أحدث القيود المحاسبية الآلية المزدوجة</h2>
+                </div>
+                <a href="/accounting/journal-entries" class="text-xs text-odoo-purple hover:underline font-bold">دفتر اليومية</a>
+            </div>
+            
+            <div class="divide-y divide-slate-100 text-xs">
+                <template x-if="metrics && metrics.recent_journals.length > 0">
+                    <template x-for="je in metrics.recent_journals" :key="je.id">
+                        <div class="py-2.5 flex items-center justify-between">
+                            <div>
+                                <div class="font-bold text-odoo-purple font-mono" x-text="je.entry_number"></div>
+                                <div class="text-slate-500 text-[11px]" x-text="je.narration"></div>
+                            </div>
+                            <div class="text-left font-mono">
+                                <div class="font-bold text-slate-900" x-text="'$' + je.total_debit.toFixed(2)"></div>
+                                <div class="text-[10px] text-emerald-600 font-bold">متزن 100%</div>
+                            </div>
+                        </div>
+                    </template>
+                </template>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

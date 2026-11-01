@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}سجل الحركات المخزنية والتسويات{% endblock %}
+
+{% block content %}
+<div x-data="{
+    moves: [],
+    loading: true,
+    searchQuery: '',
+    typeFilter: 'ALL',
+
+    async loadMoves() {
+        this.loading = true;
+        try {
+            const res = await fetch('/inventory/api/stock-moves');
+            if (res.ok) this.moves = await res.json();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    },
+
+    get filteredMoves() {
+        return this.moves.filter(m => {
+            const matchSearch = !this.searchQuery || 
+                m.move_number.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                (m.item && m.item.name_ar.includes(this.searchQuery)) ||
+                (m.reference && m.reference.includes(this.searchQuery));
+            const matchType = this.typeFilter === 'ALL' || m.move_type === this.typeFilter;
+            return matchSearch && matchType;
+        });
+    }
+}" x-init="loadMoves()">
+
+    <!-- Odoo Control Panel -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+                <nav class="flex items-center space-x-reverse space-x-1.5 text-xs text-slate-500 mb-1">
+                    <a href="/dashboard" class="hover:text-odoo-purple transition">الرئيسية</a>
+                    <span>/</span>
+                    <span class="text-slate-400">المخازن</span>
+                    <span>/</span>
+                    <span class="text-odoo-purple font-bold">سجل الحركات المخزنية</span>
+                </nav>
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <h1 class="text-xl font-bold text-slate-900">سجل حركات المخزون والتحويلات والتسويات</h1>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-odoo-purple font-mono" x-text="filteredMoves.length + ' حركة'"></span>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-reverse space-x-2">
+                <a href="/inventory/api/stock-moves/export" class="inline-flex items-center px-3.5 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition">
+                    <i class="fa-solid fa-file-excel ml-1.5"></i>
+                    <span>تصدير Excel</span>
+                </a>
+                <button @click="loadMoves()" class="p-2 border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-600 transition">
+                    <i class="fa-solid fa-arrows-rotate" :class="loading ? 'fa-spin' : ''"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <div class="relative w-64">
+                <input type="text" x-model="searchQuery" placeholder="بحث برقم الحركة، الصنف، أو المرجع..."
+                       class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs">
+                <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400"></i>
+            </div>
+
+            <select x-model="typeFilter" class="py-1.5 px-3 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white">
+                <option value="ALL">جميع أنواع الحركات</option>
+                <option value="PURCHASE_RECEIPT">استلام مشتريات وشحنات</option>
+                <option value="ROASTING_CONSUME">صرف حبوب خام للتحميص</option>
+                <option value="ROASTING_OUTPUT">توريد بن محمص ومطحون</option>
+                <option value="BOM_CONSUME">صرف مكونات خلط وتعبئة</option>
+                <option value="BOM_OUTPUT">إنتاج عبوات تامة معبأة</option>
+                <option value="SALES_DELIVERY">صرف مبيعات وتسليم عميل</option>
+                <option value="ADJUSTMENT">تسوية جردية</option>
+                <option value="OPENING_BALANCE">أرصدة افتتاحية</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Stock Moves Table -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+                    <tr>
+                        <th class="py-3 px-4 font-bold">رقم الحركة</th>
+                        <th class="py-3 px-4 font-bold">التاريخ والوقت</th>
+                        <th class="py-3 px-4 font-bold">نوع الحركة</th>
+                        <th class="py-3 px-4 font-bold">الصنف</th>
+                        <th class="py-3 px-4 font-bold">من مستودع</th>
+                        <th class="py-3 px-4 font-bold">إلى مستودع</th>
+                        <th class="py-3 px-4 font-bold font-mono text-left">الكمية</th>
+                        <th class="py-3 px-4 font-bold font-mono text-left">تكلفة الوحدة</th>
+                        <th class="py-3 px-4 font-bold">المرجع / المستند</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-mono">
+                    <template x-if="loading">
+                        <tr>
+                            <td colspan="9" class="py-10 text-center text-slate-400 font-sans">
+                                جاري تحميل سجل الحركات...
+                            </td>
+                        </tr>
+                    </template>
+
+                    <template x-if="!loading && filteredMoves.length === 0">
+                        <tr>
+                            <td colspan="9" class="py-8 text-center text-slate-400 font-sans">
+                                لا توجد حركات مخزنية مسجلة
+                            </td>
+                        </tr>
+                    </template>
+
+                    <template x-if="!loading && filteredMoves.length > 0">
+                        <template x-for="m in filteredMoves" :key="m.id">
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="py-3 px-4 font-bold text-odoo-purple" x-text="m.move_number"></td>
+                                <td class="py-3 px-4 text-slate-500" x-text="m.created_at ? m.created_at.replace('T', ' ').substring(0, 16) : '-'"></td>
+                                <td class="py-3 px-4 font-sans">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                                          :class="{
+                                              'bg-emerald-100 text-emerald-800': m.move_type.includes('OUTPUT') || m.move_type.includes('RECEIPT'),
+                                              'bg-amber-100 text-amber-800': m.move_type.includes('CONSUME') || m.move_type.includes('DELIVERY'),
+                                              'bg-purple-100 text-purple-800': m.move_type === 'ADJUSTMENT' || m.move_type === 'OPENING_BALANCE'
+                                          }"
+                                          x-text="m.move_type"></span>
+                                </td>
+                                <td class="py-3 px-4 font-bold font-sans text-slate-900" x-text="m.item ? m.item.name_ar : '-'"></td>
+                                <td class="py-3 px-4 font-sans text-slate-600" x-text="m.from_warehouse ? m.from_warehouse.name_ar : '-'"></td>
+                                <td class="py-3 px-4 font-sans text-slate-600" x-text="m.to_warehouse ? m.to_warehouse.name_ar : '-'"></td>
+                                <td class="py-3 px-4 text-left font-bold text-slate-900" x-text="m.quantity"></td>
+                                <td class="py-3 px-4 text-left text-slate-700" x-text="'$' + (m.unit_cost || 0).toFixed(2)"></td>
+                                <td class="py-3 px-4 font-sans text-slate-500" x-text="m.reference || '-'"></td>
+                            </tr>
+                        </template>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

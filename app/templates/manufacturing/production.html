@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}أوامر الخلط والتعبئة والتغليف{% endblock %}
+
+{% block content %}
+<div x-data="{
+    orders: [],
+    recipes: [],
+    loading: true,
+    viewMode: 'list', // 'list' | 'kanban'
+    searchQuery: '',
+    statusFilter: 'ALL',
+
+    // Create Modal state
+    modal: {
+        show: false,
+        date: new Date().toISOString().split('T')[0],
+        recipe_id: '',
+        target_quantity: 50,
+        notes: '',
+        saving: false
+    },
+
+    async initData() {
+        this.loading = true;
+        try {
+            const [ordersRes, recRes] = await Promise.all([
+                fetch('/manufacturing/api/production'),
+                fetch('/manufacturing/api/recipes')
+            ]);
+            if (ordersRes.ok) this.orders = await ordersRes.json();
+            if (recRes.ok) this.recipes = await recRes.json();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    },
+
+    get filteredOrders() {
+        return this.orders.filter(o => {
+            const matchSearch = !this.searchQuery || 
+                o.order_number.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                (o.recipe && o.recipe.name_ar.includes(this.searchQuery));
+            const matchStatus = this.statusFilter === 'ALL' || o.status === this.statusFilter;
+            return matchSearch && matchStatus;
+        });
+    },
+
+    openCreate() {
+        this.modal = {
+            show: true,
+            date: new Date().toISOString().split('T')[0],
+            recipe_id: this.recipes.length > 0 ? this.recipes[0].id : '',
+            target_quantity: 50,
+            notes: '',
+            saving: false
+        };
+    },
+
+    async createOrder() {
+        if (!this.modal.recipe_id || this.modal.target_quantity <= 0) {
+            showToast('يرجى اختيار التركيبة وتحديد كمية صالحة', 'error');
+            return;
+        }
+        this.modal.saving = true;
+        try {
+            const res = await fetch('/manufacturing/api/production', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.modal)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(`تم إنشاء أمر التعبئة ${data.order_number} بنجاح`);
+                this.modal.show = false;
+                this.initData();
+            } else {
+                showToast(data.detail || 'حدث خطأ أثناء الإنشاء', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        } finally {
+            this.modal.saving = false;
+        }
+    },
+
+    async completeOrder(id, orderNum) {
+        if (!confirm(`هل أنت متأكد من تنفيذ أمر الإنتاج رقم ${orderNum} وخصم المكونات وتوريد العبوات التامة لمستودع WH-FG؟`)) return;
+        try {
+            const res = await fetch(`/manufacturing/api/production/${id}/complete`, { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(`تم تنفيذ أمر الإنتاج رقم ${orderNum} بنجاح! وترحيل القيد المحاسبي`);
+                this.initData();
+            } else {
+                showToast(data.detail || 'فشل تنفيذ أمر الإنتاج', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        }
+    },
+
+    async deleteOrder(id, orderNum) {
+        if (!confirm(`هل أنت متأكد من حذف أمر الإنتاج رقم ${orderNum}؟`)) return;
+        try {
+            const res = await fetch(`/manufacturing/api/production/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                showToast('تم حذف الأمر بنجاح');
+                this.initData();
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        }
+    }
+}" x-init="initData()">
+
+    <!-- Odoo Control Panel -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+                <nav class="flex items-center space-x-reverse space-x-1.5 text-xs text-slate-500 mb-1">
+                    <a href="/dashboard" class="hover:text-odoo-purple transition">الرئيسية</a>
+                    <span>/</span>
+                    <span class="text-slate-400">المطحن والإنتاج</span>
+                    <span>/</span>
+                    <span class="text-odoo-purple font-bold">أوامر الخلط والتعبئة والتغليف</span>
+                </nav>
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <h1 class="text-xl font-bold text-slate-900">سجل تشغيل خطوط الخلط والتعبئة والتغليف (Packaging Batches)</h1>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-mono" x-text="filteredOrders.length + ' أمر'"></span>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <button @click="openCreate()" class="odoo-btn-primary px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition flex items-center">
+                    <i class="fa-solid fa-plus ml-1.5"></i>
+                    <span>أمر تعبئة جديد</span>
+                </button>
+                <a href="/manufacturing/api/production/export" class="inline-flex items-center px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition">
+                    <i class="fa-solid fa-file-excel ml-1.5"></i>
+                    <span>تصدير Excel</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Filters & View Switchers -->
+        <div class="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="relative w-64">
+                    <input type="text" x-model="searchQuery" placeholder="بحث برقم الأمر أو اسم التركيبة..."
+                           class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs">
+                    <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400"></i>
+                </div>
+                <select x-model="statusFilter" class="py-1.5 px-3 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white">
+                    <option value="ALL">جميع الحالات</option>
+                    <option value="DRAFT">مسودات قيد التجهيز</option>
+                    <option value="COMPLETED">مكتمل ومورد للمخزن</option>
+                </select>
+            </div>
+
+            <div class="flex items-center border border-slate-300 rounded-lg overflow-hidden bg-slate-50 p-0.5">
+                <button @click="viewMode = 'list'" :class="viewMode === 'list' ? 'bg-white shadow-sm text-odoo-purple font-bold' : 'text-slate-500'" class="px-2.5 py-1 text-xs rounded">
+                    <i class="fa-solid fa-list ml-1"></i> عرض قائمة
+                </button>
+                <button @click="viewMode = 'kanban'" :class="viewMode === 'kanban' ? 'bg-white shadow-sm text-odoo-purple font-bold' : 'text-slate-500'" class="px-2.5 py-1 text-xs rounded">
+                    <i class="fa-solid fa-table-cells-large ml-1"></i> عرض كانبان
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. List View -->
+    <div x-show="viewMode === 'list'" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 text-slate-600 border-b border-slate-200 font-bold">
+                    <tr>
+                        <th class="py-3 px-4">رقم الأمر</th>
+                        <th class="py-3 px-4">التاريخ</th>
+                        <th class="py-3 px-4">التركيبة BOM المعتمدة</th>
+                        <th class="py-3 px-4 font-mono text-left">الكمية المستهدفة</th>
+                        <th class="py-3 px-4 font-mono text-left">إجمالي تكلفة الوجبة ($)</th>
+                        <th class="py-3 px-4 font-mono text-left">تكلفة العبوة ($)</th>
+                        <th class="py-3 px-4 text-center">الحالة</th>
+                        <th class="py-3 px-4 text-center">الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-mono">
+                    <template x-if="loading">
+                        <tr>
+                            <td colspan="8" class="py-12 text-center text-slate-400 font-sans">جاري تحميل أوامر التعبئة...</td>
+                        </tr>
+                    </template>
+                    <template x-if="!loading && filteredOrders.length === 0">
+                        <tr>
+                            <td colspan="8" class="py-8 text-center text-slate-400 font-sans">لا توجد أوامر تعبئة مسجلة</td>
+                        </tr>
+                    </template>
+                    <template x-if="!loading && filteredOrders.length > 0">
+                        <template x-for="o in filteredOrders" :key="o.id">
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="py-3 px-4 font-bold text-odoo-purple" x-text="o.order_number"></td>
+                                <td class="py-3 px-4 text-slate-500" x-text="o.date"></td>
+                                <td class="py-3 px-4 font-sans font-bold text-slate-900" x-text="o.recipe ? o.recipe.name_ar : '-'"></td>
+                                <td class="py-3 px-4 text-left font-bold text-slate-900" x-text="o.target_quantity + ' عبوة'"></td>
+                                <td class="py-3 px-4 text-left text-slate-900" x-text="o.total_cost ? '$' + o.total_cost.toFixed(2) : '-'"></td>
+                                <td class="py-3 px-4 text-left text-emerald-700 font-bold" x-text="o.unit_cost ? '$' + o.unit_cost.toFixed(2) : '-'"></td>
+                                <td class="py-3 px-4 text-center font-sans">
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                                          :class="o.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'"
+                                          x-text="o.status === 'COMPLETED' ? 'مكتمل ومورد' : 'مسودة'"></span>
+                                </td>
+                                <td class="py-3 px-4 text-center font-sans">
+                                    <template x-if="o.status === 'DRAFT'">
+                                        <div class="flex items-center justify-center space-x-reverse space-x-1">
+                                            <button @click="completeOrder(o.id, o.order_number)" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[11px] shadow">
+                                                تنفيذ وخصم
+                                            </button>
+                                            <button @click="deleteOrder(o.id, o.order_number)" class="p-1 text-rose-600 hover:bg-rose-50 rounded">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </template>
+                                    <template x-if="o.status === 'COMPLETED'">
+                                        <a href="/accounting/journal-entries" class="text-xs font-mono font-bold text-odoo-purple hover:underline">
+                                            قيد #<span x-text="o.journal_entry_id"></span>
+                                        </a>
+                                    </template>
+                                </td>
+                            </tr>
+                        </template>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 2. Kanban View -->
+    <div x-show="viewMode === 'kanban'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="o in filteredOrders" :key="o.id">
+            <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-mono text-xs font-bold text-odoo-purple" x-text="o.order_number"></span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                              :class="o.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'"
+                              x-text="o.status === 'COMPLETED' ? 'مكتمل' : 'مسودة'"></span>
+                    </div>
+                    <h3 class="font-bold text-slate-900 text-sm" x-text="o.recipe ? o.recipe.name_ar : '-'"></h3>
+                    <div class="text-xs text-slate-400 font-mono mb-3" x-text="o.date"></div>
+                    <div class="space-y-1 text-xs text-slate-600 border-t border-slate-100 pt-2 font-mono">
+                        <div class="flex justify-between">
+                            <span class="font-sans text-slate-400">الكمية المطلوبة:</span>
+                            <span class="font-bold text-slate-900" x-text="o.target_quantity + ' عبوة'"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-sans text-slate-400">إجمالي تكلفة الوجبة:</span>
+                            <span class="text-slate-900" x-text="o.total_cost ? '$' + o.total_cost.toFixed(2) : '-'"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-sans text-slate-400">تكلفة العبوة:</span>
+                            <span class="font-bold text-emerald-700" x-text="o.unit_cost ? '$' + o.unit_cost.toFixed(2) : '-'"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-[10px] text-slate-400 font-sans">مستودع الوجهة: WH-FG</span>
+                    <div>
+                        <template x-if="o.status === 'DRAFT'">
+                            <button @click="completeOrder(o.id, o.order_number)" class="px-3 py-1 bg-emerald-600 text-white rounded font-bold text-xs hover:bg-emerald-700 transition">
+                                تنفيذ وخصم
+                            </button>
+                        </template>
+                        <template x-if="o.status === 'COMPLETED'">
+                            <span class="text-xs font-bold text-emerald-600"><i class="fa-solid fa-check ml-1"></i> منجز ومورد</span>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Create Modal -->
+    <div x-cloak x-show="modal.show" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden text-right" @click.outside="modal.show = false">
+            <div class="bg-odoo-purple text-white px-6 py-4 flex items-center justify-between">
+                <h3 class="font-bold text-base">إنشاء أمر تشغيل خلط وتعبئة</h3>
+                <button @click="modal.show = false" class="text-white/80 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form @submit.prevent="createOrder()" class="p-6 space-y-4 text-xs text-slate-800">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">التركيبة المعتمدة (BOM Recipe):</label>
+                    <select x-model="modal.recipe_id" required class="w-full p-2 border border-slate-300 rounded-lg bg-white font-bold">
+                        <option value="">-- اختر تركيبة البن --</option>
+                        <template x-for="r in recipes" :key="r.id">
+                            <option :value="r.id" x-text="r.name_ar + ' (' + r.code + ')'"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">الكمية المراد تعبئتها (عبوة):</label>
+                    <input type="number" step="1" min="1" x-model="modal.target_quantity" required class="w-full p-2 border border-slate-300 rounded-lg font-mono text-center font-bold text-base text-odoo-purple">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">تاريخ التشغيل:</label>
+                    <input type="date" x-model="modal.date" required class="w-full p-2 border border-slate-300 rounded-lg font-mono">
+                </div>
+                <div class="pt-3 border-t border-slate-200 flex justify-between">
+                    <button type="button" @click="modal.show = false" class="px-4 py-2 border border-slate-300 rounded-lg font-bold">إلغاء</button>
+                    <button type="submit" :disabled="modal.saving" class="px-5 py-2 odoo-btn-primary font-bold rounded-lg shadow">تأكيد أمر التعبئة</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

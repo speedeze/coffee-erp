@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}ميزان المراجعة بالأرصدة والمجاميع{% endblock %}
+
+{% block content %}
+<div x-data="{
+    report: null,
+    asOfDate: new Date().toISOString().split('T')[0],
+    includeZeroBalances: true,
+    loading: true,
+    searchQuery: '',
+    selectedLevel: 'ALL',
+    
+    async loadTrialBalance() {
+        this.loading = true;
+        try {
+            const res = await fetch(`/api/accounting/trial-balance?as_of_date=${this.asOfDate}&include_zero_balances=${this.includeZeroBalances}`);
+            if (res.ok) this.report = await res.json();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    },
+    
+    get filteredRows() {
+        if (!this.report || !this.report.rows) return [];
+        return this.report.rows.filter(r => {
+            const matchSearch = !this.searchQuery || 
+                r.code.includes(this.searchQuery) || 
+                r.name_ar.includes(this.searchQuery) || 
+                r.name.toLowerCase().includes(this.searchQuery.toLowerCase());
+            
+            const matchLevel = this.selectedLevel === 'ALL' || 
+                (this.selectedLevel === 'PARENTS' && r.is_parent) || 
+                (this.selectedLevel === 'SUB' && !r.is_parent) ||
+                (this.selectedLevel == r.level);
+            
+            return matchSearch && matchLevel;
+        });
+    }
+}" x-init="loadTrialBalance()">
+
+    <!-- Odoo-Style Control Panel -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <!-- Breadcrumbs -->
+            <div>
+                <nav class="flex items-center space-x-reverse space-x-1.5 text-xs text-slate-500 mb-1">
+                    <a href="/dashboard" class="hover:text-odoo-purple transition">الرئيسية</a>
+                    <span>/</span>
+                    <span class="text-slate-400">التقارير الختامية</span>
+                    <span>/</span>
+                    <span class="text-odoo-purple font-bold">ميزان المراجعة</span>
+                </nav>
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <h1 class="text-xl font-bold text-slate-900">ميزان المراجعة بالأرصدة والمجاميع</h1>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-odoo-purple">
+                        Trial Balance
+                    </span>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-wrap items-center gap-2">
+                <a :href="`/api/accounting/trial-balance/export?as_of_date=${asOfDate}`" 
+                   class="inline-flex items-center px-3.5 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition">
+                    <i class="fa-solid fa-file-excel ml-1.5 text-sm"></i>
+                    <span>تصدير Excel</span>
+                </a>
+                <button onclick="window.print()" 
+                        class="inline-flex items-center px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white shadow-sm transition">
+                    <i class="fa-solid fa-print ml-1.5"></i>
+                    <span>طباعة التقرير</span>
+                </button>
+                <button @click="loadTrialBalance()" 
+                        class="p-2 border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-600 transition"
+                        title="تحديث البيانات">
+                    <i class="fa-solid fa-arrows-rotate" :class="loading ? 'fa-spin' : ''"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Filters & Search Bar -->
+        <div class="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <!-- Search & Hierarchy Filters -->
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="relative w-64">
+                    <input type="text" x-model="searchQuery" placeholder="بحث برقم الحساب أو الاسم..."
+                           class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-odoo-purple focus:border-odoo-purple">
+                    <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-xs"></i>
+                </div>
+
+                <select x-model="selectedLevel" class="py-1.5 px-3 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white">
+                    <option value="ALL">جميع المستويات (الشجرة كاملة)</option>
+                    <option value="PARENTS">الحسابات الرئيسية فقط (تجميعي)</option>
+                    <option value="SUB">الحسابات الفرعية التحليلية فقط</option>
+                    <option value="1">المستوى 1 (الحسابات العامة)</option>
+                    <option value="2">المستوى 2 (الحسابات المساعدة)</option>
+                    <option value="3">المستوى 3 (حسابات الأستاذ المساعد)</option>
+                </select>
+
+                <label class="flex items-center space-x-reverse space-x-1.5 cursor-pointer select-none text-slate-600 mr-2">
+                    <input type="checkbox" x-model="includeZeroBalances" @change="loadTrialBalance()" class="rounded border-slate-300 text-odoo-purple focus:ring-odoo-purple">
+                    <span>إظهار الحسابات الصفرية</span>
+                </label>
+            </div>
+
+            <!-- Date & Balance Status -->
+            <div class="flex items-center space-x-reverse space-x-3">
+                <div class="flex items-center space-x-reverse space-x-1.5">
+                    <label class="font-bold text-slate-600">حتى تاريخ:</label>
+                    <input type="date" x-model="asOfDate" @change="loadTrialBalance()" 
+                           class="py-1 px-2.5 border border-slate-300 rounded-lg text-xs font-mono text-slate-700">
+                </div>
+
+                <template x-if="report">
+                    <div class="flex items-center space-x-reverse space-x-1.5 px-3 py-1 rounded-full text-xs font-bold"
+                         :class="report.is_balanced ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'">
+                        <i class="fa-solid" :class="report.is_balanced ? 'fa-circle-check text-emerald-600' : 'fa-circle-exclamation text-rose-600'"></i>
+                        <span x-text="report.is_balanced ? 'الميزان متزن 100%' : 'الميزان غير متزن!'"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trial Balance Table -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead>
+                    <!-- Main Header Grouping -->
+                    <tr class="bg-slate-100 text-slate-700 text-xs border-b border-slate-200 font-bold">
+                        <th rowspan="2" class="py-3 px-4 w-28 text-center border-l border-slate-200">رقم الحساب</th>
+                        <th rowspan="2" class="py-3 px-4 min-w-[200px]">اسم الحساب (عربي / English)</th>
+                        <th rowspan="2" class="py-3 px-3 text-center border-l border-slate-200">المستوى</th>
+                        <th colspan="2" class="py-2 px-4 text-center border-l border-slate-200 bg-slate-200/60 font-black">
+                            مجموع الحركات (Movements)
+                        </th>
+                        <th colspan="2" class="py-2 px-4 text-center bg-purple-50 font-black text-odoo-purple">
+                            الأرصدة الختامية (Ending Balances)
+                        </th>
+                    </tr>
+                    <!-- Sub Header (Debit / Credit) -->
+                    <tr class="bg-slate-50 text-slate-600 text-[11px] border-b border-slate-200 font-bold">
+                        <th class="py-2 px-3 text-left w-32 bg-slate-100/80">مدين (Debit)</th>
+                        <th class="py-2 px-3 text-left w-32 border-l border-slate-200 bg-slate-100/80">دائن (Credit)</th>
+                        <th class="py-2 px-3 text-left w-36 text-emerald-800 bg-emerald-50/50">رصيد مدين</th>
+                        <th class="py-2 px-3 text-left w-36 text-rose-800 bg-rose-50/50">رصيد دائن</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-mono text-[11px]">
+                    <template x-if="loading">
+                        <tr>
+                            <td colspan="7" class="py-12 text-center text-slate-400 font-sans">
+                                <i class="fa-solid fa-circle-notch fa-spin text-2xl text-odoo-purple mb-2 block"></i>
+                                جاري احتساب ميزان المراجعة وتجميع الأرصدة...
+                            </td>
+                        </tr>
+                    </template>
+
+                    <template x-if="!loading && filteredRows.length === 0">
+                        <tr>
+                            <td colspan="7" class="py-10 text-center text-slate-400 font-sans">
+                                لا توجد حسابات تطابق معايير البحث المحددة
+                            </td>
+                        </tr>
+                    </template>
+
+                    <template x-if="!loading && filteredRows.length > 0">
+                        <template x-for="r in filteredRows" :key="r.code">
+                            <tr class="hover:bg-purple-50/30 transition"
+                                :class="{
+                                    'bg-slate-100/90 font-bold text-slate-900 border-t-2 border-slate-300': r.level === 1,
+                                    'bg-slate-50/80 font-bold text-slate-800': r.level === 2,
+                                    'text-slate-600': r.level === 3
+                                }">
+                                <!-- Account Code -->
+                                <td class="py-2.5 px-4 text-center font-bold font-mono border-l border-slate-200"
+                                    :class="r.is_parent ? 'text-odoo-purple' : 'text-slate-600'"
+                                    x-text="r.code"></td>
+
+                                <!-- Account Title with Hierarchy Indentation -->
+                                <td class="py-2.5 px-4 font-sans">
+                                    <div class="flex items-center" :style="'padding-right: ' + ((r.level - 1) * 18) + 'px'">
+                                        <template x-if="r.is_parent">
+                                            <i class="fa-solid fa-folder-open text-amber-500 ml-1.5 text-xs"></i>
+                                        </template>
+                                        <template x-if="!r.is_parent">
+                                            <i class="fa-regular fa-file-lines text-slate-400 ml-1.5 text-xs"></i>
+                                        </template>
+                                        <div>
+                                            <span class="font-bold text-xs" x-text="r.name_ar"></span>
+                                            <span class="text-[10px] text-slate-400 block font-mono" x-text="r.name"></span>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <!-- Level Badge -->
+                                <td class="py-2.5 px-3 text-center border-l border-slate-200 font-sans">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold"
+                                          :class="{
+                                              'bg-purple-200 text-purple-900 font-bold': r.level === 1,
+                                              'bg-slate-200 text-slate-800': r.level === 2,
+                                              'bg-slate-100 text-slate-600': r.level === 3
+                                          }"
+                                          x-text="r.is_parent ? 'رئيسي (L' + r.level + ')' : 'فرعي'"></span>
+                                </td>
+
+                                <!-- Movement Debit -->
+                                <td class="py-2.5 px-3 text-left font-mono"
+                                    :class="r.total_debit > 0 ? 'text-slate-900 font-semibold' : 'text-slate-300'"
+                                    x-text="r.total_debit > 0 ? '$' + r.total_debit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'"></td>
+
+                                <!-- Movement Credit -->
+                                <td class="py-2.5 px-3 text-left font-mono border-l border-slate-200"
+                                    :class="r.total_credit > 0 ? 'text-slate-900 font-semibold' : 'text-slate-300'"
+                                    x-text="r.total_credit > 0 ? '$' + r.total_credit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'"></td>
+
+                                <!-- Ending Debit Balance -->
+                                <td class="py-2.5 px-3 text-left font-mono bg-emerald-50/20"
+                                    :class="r.net_debit > 0 ? 'text-emerald-800 font-bold' : 'text-slate-300'"
+                                    x-text="r.net_debit > 0 ? '$' + r.net_debit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'"></td>
+
+                                <!-- Ending Credit Balance -->
+                                <td class="py-2.5 px-3 text-left font-mono bg-rose-50/20"
+                                    :class="r.net_credit > 0 ? 'text-rose-800 font-bold' : 'text-slate-300'"
+                                    x-text="r.net_credit > 0 ? '$' + r.net_credit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'"></td>
+                            </tr>
+                        </template>
+                    </template>
+                </tbody>
+
+                <!-- Summary Totals Row (Equal Equilibrium Verification) -->
+                <tfoot class="bg-slate-900 text-white font-mono text-xs font-bold border-t-2 border-slate-800">
+                    <tr class="py-3 px-4">
+                        <td colspan="3" class="py-3 px-4 font-sans text-center text-sm font-extrabold text-amber-400">
+                            الإجمالي العام لميزان المراجعة (Grand Totals):
+                        </td>
+                        <!-- Movement Debits Total -->
+                        <td class="py-3 px-3 text-left text-slate-200 font-bold" 
+                            x-text="report ? '$' + report.movement_debit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '$0.00'"></td>
+                        <!-- Movement Credits Total -->
+                        <td class="py-3 px-3 text-left text-slate-200 font-bold border-l border-slate-700" 
+                            x-text="report ? '$' + report.movement_credit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '$0.00'"></td>
+                        <!-- Net Ending Debit Balances Total -->
+                        <td class="py-3 px-3 text-left text-emerald-400 text-sm font-extrabold" 
+                            x-text="report ? '$' + report.total_debit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '$0.00'"></td>
+                        <!-- Net Ending Credit Balances Total -->
+                        <td class="py-3 px-3 text-left text-emerald-400 text-sm font-extrabold" 
+                            x-text="report ? '$' + report.total_credit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '$0.00'"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- Accounting Integrity Notes -->
+    <div class="mt-4 p-4 rounded-xl bg-purple-50/60 border border-purple-200 text-xs text-purple-950 flex items-start space-x-reverse space-x-3">
+        <i class="fa-solid fa-shield-halved text-odoo-purple text-lg mt-0.5"></i>
+        <div class="leading-relaxed">
+            <span class="font-bold">قواعد الرقابة المحاسبية الآلية:</span>
+            يعتمد ميزان المراجعة على محرك القيود المزدوجة التلقائي. تتجمع أرقام الحسابات التحليلية في الحسابات التجميعية (الرئيسية والمساعدة)، ويتم التحقق من مطابقة إجمالي الحركات المدينة مع الحركات الدائنة ($\sum \text{المدين} == \sum \text{الدائن}$)، وكذلك تساوي الأرصدة الختامية المدينة مع الدائنة.
+        </div>
+    </div>
+
+</div>
+{% endblock %}

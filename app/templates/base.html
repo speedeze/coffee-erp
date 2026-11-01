@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="h-full bg-slate-100 font-arabic">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}نظام إدارة وتصنيع القهوة{% endblock %} - CoffeeRoast ERP</title>
+    
+    <!-- Google Fonts: Cairo -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        coffee: {
+                            50: '#fdf8f4',
+                            100: '#f9f0e8',
+                            200: '#f2ded0',
+                            300: '#e7c4ad',
+                            400: '#d79e7c',
+                            500: '#cb7e53',
+                            600: '#be6538',
+                            700: '#9e4f2b',
+                            800: '#7e4026',
+                            900: '#401f11',
+                            950: '#261108',
+                        },
+                        odoo: {
+                            purple: '#714B67',
+                            purpleDark: '#56384e',
+                            purpleLight: '#8a5e7f',
+                            dark: '#0e1726',
+                            slate: '#1E293B',
+                            teal: '#00A09D',
+                            tealDark: '#008481',
+                            accent: '#F2F2F2',
+                            gray: '#4c4c4c'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Cairo', 'sans-serif'],
+                        arabic: ['Cairo', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Alpine.js (CDN) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+    
+    <style>
+        [x-cloak] { display: none !important; }
+        body { font-family: 'Cairo', sans-serif; }
+        
+        /* Odoo-style subtle scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .odoo-btn-primary {
+            background-color: #714B67;
+            color: white;
+            transition: all 0.15s ease-in-out;
+        }
+        .odoo-btn-primary:hover {
+            background-color: #56384e;
+        }
+        .odoo-btn-teal {
+            background-color: #00A09D;
+            color: white;
+            transition: all 0.15s ease-in-out;
+        }
+        .odoo-btn-teal:hover {
+            background-color: #008481;
+        }
+        .odoo-sheet {
+            background: #ffffff;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="h-full antialiased flex flex-col text-slate-800 bg-slate-100" x-data="{ 
+    mobileMenuOpen: false,
+    activeNav: '{{ active_nav | default('dashboard') }}',
+    activeSubNav: '{{ sub_nav | default('') }}',
+    toast: { show: false, message: '', type: 'success' },
+    showToast(msg, type='success') {
+        this.toast.message = msg;
+        this.toast.type = type;
+        this.toast.show = true;
+        setTimeout(() => { this.toast.show = false; }, 4000);
+    },
+    
+    // Global Import Modal state
+    importModal: {
+        show: false,
+        title: '',
+        uploadUrl: '',
+        templateUrl: '',
+        sampleName: '',
+        targetModule: '',
+        uploading: false,
+        file: null
+    },
+    openImportModal(title, uploadUrl, templateUrl, sampleName, moduleName) {
+        this.importModal.title = title;
+        this.importModal.uploadUrl = uploadUrl;
+        this.importModal.templateUrl = templateUrl;
+        this.importModal.sampleName = sampleName;
+        this.importModal.targetModule = moduleName;
+        this.importModal.file = null;
+        this.importModal.show = true;
+    },
+    async submitImport() {
+        if (!this.$refs.importFileInput.files[0]) {
+            this.showToast('يرجى اختيار ملف Excel أو CSV أولاً', 'error');
+            return;
+        }
+        this.importModal.uploading = true;
+        const formData = new FormData();
+        formData.append('file', this.$refs.importFileInput.files[0]);
+        try {
+            const res = await fetch(this.importModal.uploadUrl, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                this.showToast(`تم استيراد ${data.imported || 0} سجل وتحديث ${data.updated || 0} سجل بنجاح!`, 'success');
+                this.importModal.show = false;
+                setTimeout(() => window.location.reload(), 1200);
+            } else {
+                this.showToast(data.detail || 'حدث خطأ أثناء الاستيراد', 'error');
+            }
+        } catch (e) {
+            this.showToast('فشل الاتصال بالخادم أثناء رفع الملف', 'error');
+        } finally {
+            this.importModal.uploading = false;
+        }
+    }
+}">
+
+    <!-- Toast Notification -->
+    <div x-cloak x-show="toast.show" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform translate-y-4"
+         x-transition:enter-end="opacity-100 transform translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 transform translate-y-0"
+         x-transition:leave-end="opacity-0 transform translate-y-4"
+         class="fixed bottom-5 left-5 z-50 flex items-center p-4 rounded-xl shadow-2xl text-white font-medium text-sm"
+         :class="toast.type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'">
+        <i class="fa-solid ml-3 text-lg" :class="toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check'"></i>
+        <span x-text="toast.message"></span>
+    </div>
+
+    <!-- Top Odoo Navigation Bar with Nested Dropdowns -->
+    <header class="bg-odoo-purple text-white shadow-md sticky top-0 z-40 select-none">
+        <div class="px-3 sm:px-4 flex items-center justify-between h-12">
+            
+            <!-- Right: Logo & Main Navigation Dropdown Menus (RTL Start) -->
+            <div class="flex items-center space-x-reverse space-x-1 lg:space-x-reverse lg:space-x-2">
+                <!-- Mobile Menu Button -->
+                <button @click="mobileMenuOpen = !mobileMenuOpen" class="lg:hidden p-1.5 rounded text-white/80 hover:text-white hover:bg-white/10 transition">
+                    <i class="fa-solid fa-bars text-base"></i>
+                </button>
+
+                <!-- App Brand / Home Link -->
+                <a href="/dashboard" class="flex items-center space-x-reverse space-x-2 px-2 py-1 rounded hover:bg-white/10 transition font-bold text-sm tracking-wide">
+                    <div class="w-7 h-7 rounded bg-amber-500 flex items-center justify-center text-white shadow-sm">
+                        <i class="fa-solid fa-mug-hot text-xs"></i>
+                    </div>
+                    <span class="hidden sm:inline font-extrabold text-sm text-white">محامص البن <span class="bg-amber-400 text-slate-900 text-[10px] font-black px-1 py-0.5 rounded mr-1">ERP</span></span>
+                </a>
+
+                <!-- Desktop Odoo Menu Bar with Nested Dropdowns -->
+                <nav class="hidden lg:flex items-center space-x-reverse space-x-1 text-xs font-semibold">
+                    
+                    <!-- Dashboard -->
+                    <a href="/dashboard" class="px-2.5 py-1.5 rounded transition {{ 'bg-white/20 text-white font-bold' if active_nav == 'dashboard' else 'text-white/90 hover:bg-white/10' }}">
+                        لوحة التحكم
+                    </a>
+
+                    <!-- 1. المبيعات والجملة -->
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                        <button @click="open = !open" 
+                                class="px-2.5 py-1.5 rounded flex items-center space-x-reverse space-x-1.5 transition {{ 'bg-white/20 text-white font-bold' if active_nav == 'sales' else 'text-white/90 hover:bg-white/10' }}">
+                            <span>المبيعات والجملة</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+                        </button>
+                        <div x-cloak x-show="open" 
+                             x-transition:enter="transition ease-out duration-150"
+                             x-transition:enter-start="opacity-0 scale-95 transform -translate-y-1"
+                             x-transition:enter-end="opacity-100 scale-100 transform translate-y-0"
+                             x-transition:leave="transition ease-in duration-100"
+                             class="absolute right-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-1 text-slate-700 z-50 text-xs font-medium">
+                            <a href="/sales/invoices" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-file-invoice-dollar w-5 text-emerald-600 ml-2"></i>
+                                <span>فواتير مبيعات الجملة</span>
+                            </a>
+                            <a href="/sales/customers" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-shop w-5 text-emerald-600 ml-2"></i>
+                                <span>دليل العملاء والمقاهي</span>
+                            </a>
+                            <div class="border-t border-slate-100 my-1"></div>
+                            <a href="/sales/aging" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-clock-rotate-left w-5 text-amber-600 ml-2"></i>
+                                <span>تقرير أعمار الديون والتحصيل</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- 2. المشتريات والاستيراد -->
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                        <button @click="open = !open" 
+                                class="px-2.5 py-1.5 rounded flex items-center space-x-reverse space-x-1.5 transition {{ 'bg-white/20 text-white font-bold' if active_nav == 'purchases' else 'text-white/90 hover:bg-white/10' }}">
+                            <span>المشتريات والاستيراد</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+                        </button>
+                        <div x-cloak x-show="open" 
+                             x-transition:enter="transition ease-out duration-150"
+                             x-transition:enter-start="opacity-0 scale-95"
+                             x-transition:enter-end="opacity-100 scale-100"
+                             class="absolute right-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-1 text-slate-700 z-50 text-xs font-medium">
+                            <a href="/purchases/orders" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-ship w-5 text-cyan-600 ml-2"></i>
+                                <span>شحنات وأوامر الشراء (Landed Cost)</span>
+                            </a>
+                            <a href="/purchases/suppliers" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-truck-field w-5 text-cyan-600 ml-2"></i>
+                                <span>دليل الموردين وشركات الشحن</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- 3. المطحن والإنتاج (Core Roasting Engine) -->
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                        <button @click="open = !open" 
+                                class="px-2.5 py-1.5 rounded flex items-center space-x-reverse space-x-1.5 transition {{ 'bg-white/20 text-white font-bold' if active_nav == 'manufacturing' else 'text-white/90 hover:bg-white/10' }}">
+                            <span class="flex items-center">
+                                المطحن والإنتاج
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5"></span>
+                            </span>
+                            <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+                        </button>
+                        <div x-cloak x-show="open" 
+                             x-transition:enter="transition ease-out duration-150"
+                             x-transition:enter-start="opacity-0 scale-95"
+                             x-transition:enter-end="opacity-100 scale-100"
+                             class="absolute right-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-1 text-slate-700 z-50 text-xs font-medium">
+                            <a href="/manufacturing/roasting" class="flex items-center px-4 py-2 hover:bg-amber-50 hover:text-amber-900 transition">
+                                <i class="fa-solid fa-fire-burner w-5 text-amber-600 ml-2"></i>
+                                <div>
+                                    <span class="block font-bold">أوامر التحميص وحساب الهالك</span>
+                                    <span class="text-[10px] text-slate-400">معادلة انكماش الرطوبة وتكلفة المحمص</span>
+                                </div>
+                            </a>
+                            <div class="border-t border-slate-100 my-1"></div>
+                            <a href="/manufacturing/recipes" class="flex items-center px-4 py-2 hover:bg-amber-50 hover:text-amber-900 transition">
+                                <i class="fa-solid fa-blender w-5 text-amber-600 ml-2"></i>
+                                <span>تركيبات وخلطات البن (BOM)</span>
+                            </a>
+                            <a href="/manufacturing/production" class="flex items-center px-4 py-2 hover:bg-amber-50 hover:text-amber-900 transition">
+                                <i class="fa-solid fa-boxes-packing w-5 text-amber-600 ml-2"></i>
+                                <span>أوامر التعبئة والتغليف الآلي</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- 4. المخازن والمستودعات -->
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                        <button @click="open = !open" 
+                                class="px-2.5 py-1.5 rounded flex items-center space-x-reverse space-x-1.5 transition {{ 'bg-white/20 text-white font-bold' if active_nav == 'inventory' else 'text-white/90 hover:bg-white/10' }}">
+                            <span>المخازن</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+                        </button>
+                        <div x-cloak x-show="open" 
+                             x-transition:enter="transition ease-out duration-150"
+                             x-transition:enter-start="opacity-0 scale-95"
+                             x-transition:enter-end="opacity-100 scale-100"
+                             class="absolute right-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-1 text-slate-700 z-50 text-xs font-medium">
+                            <a href="/inventory/items" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-seedling w-5 text-indigo-500 ml-2"></i>
+                                <span>دليل الأصناف والمنتجات</span>
+                            </a>
+                            <a href="/inventory/warehouses" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-warehouse w-5 text-indigo-500 ml-2"></i>
+                                <span>المستودعات الخمسة وتقييم المخزون</span>
+                            </a>
+                            <div class="border-t border-slate-100 my-1"></div>
+                            <a href="/inventory/stock-moves" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-dolly w-5 text-indigo-500 ml-2"></i>
+                                <span>سجل الحركات المخزنية والتسويات</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- 5. الخزائن والبنوك -->
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                        <button @click="open = !open" 
+                                class="px-2.5 py-1.5 rounded flex items-center space-x-reverse space-x-1.5 transition {{ 'bg-white/20 text-white font-bold' if active_nav == 'treasury' else 'text-white/90 hover:bg-white/10' }}">
+                            <span>الخزائن والبنوك</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+                        </button>
+                        <div x-cloak x-show="open" 
+                             x-transition:enter="transition ease-out duration-150"
+                             x-transition:enter-start="opacity-0 scale-95"
+                             x-transition:enter-end="opacity-100 scale-100"
+                             class="absolute right-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-1 text-slate-700 z-50 text-xs font-medium">
+                            <a href="/treasury/receipts" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-hand-holding-dollar w-5 text-emerald-600 ml-2"></i>
+                                <span>سندات القبض (مقبوضات نقدية)</span>
+                            </a>
+                            <a href="/treasury/payments" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-money-bill-transfer w-5 text-rose-500 ml-2"></i>
+                                <span>سندات الصرف (مدفوعات الموردين)</span>
+                            </a>
+                            <div class="border-t border-slate-100 my-1"></div>
+                            <a href="/treasury/accounts" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-cash-register w-5 text-amber-600 ml-2"></i>
+                                <span>حسابات الخزائن والبنوك الجارية</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- 6. الحسابات العامة -->
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                        <button @click="open = !open" 
+                                class="px-2.5 py-1.5 rounded flex items-center space-x-reverse space-x-1.5 transition {{ 'bg-white/20 text-white font-bold' if active_nav == 'accounting' else 'text-white/90 hover:bg-white/10' }}">
+                            <span>الحسابات العامة</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+                        </button>
+                        <div x-cloak x-show="open" 
+                             x-transition:enter="transition ease-out duration-150"
+                             x-transition:enter-start="opacity-0 scale-95"
+                             x-transition:enter-end="opacity-100 scale-100"
+                             class="absolute right-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-1 text-slate-700 z-50 text-xs font-medium">
+                            <a href="/accounting/coa" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-sitemap w-5 text-odoo-purple ml-2"></i>
+                                <span>شجرة ودليل الحسابات (COA)</span>
+                            </a>
+                            <a href="/accounting/journal-entries" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-book-journal-whills w-5 text-odoo-purple ml-2"></i>
+                                <span>دفتر قيود اليومية المزدوجة</span>
+                            </a>
+                            <a href="/accounting/general-ledger" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-book w-5 text-odoo-purple ml-2"></i>
+                                <span>دفتر الأستاذ العام (كشف حساب)</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- 7. التقارير الختامية -->
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                        <button @click="open = !open" 
+                                class="px-2.5 py-1.5 rounded flex items-center space-x-reverse space-x-1.5 transition {{ 'bg-white/20 text-white font-bold' if active_nav == 'reports' else 'text-white/90 hover:bg-white/10' }}">
+                            <span>التقارير الختامية</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+                        </button>
+                        <div x-cloak x-show="open" 
+                             x-transition:enter="transition ease-out duration-150"
+                             x-transition:enter-start="opacity-0 scale-95"
+                             x-transition:enter-end="opacity-100 scale-100"
+                             class="absolute right-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-1 text-slate-700 z-50 text-xs font-medium">
+                            <a href="/accounting/trial-balance" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition font-bold text-odoo-purple">
+                                <i class="fa-solid fa-scale-balanced w-5 text-odoo-purple ml-2"></i>
+                                <span>ميزان المراجعة بالأرصدة والمجاميع</span>
+                            </a>
+                            <div class="border-t border-slate-100 my-1"></div>
+                            <a href="/accounting/trading-account" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-balance-scale-left w-5 text-blue-600 ml-2"></i>
+                                <span>حساب المتاجرة وإجمالي الربح</span>
+                            </a>
+                            <a href="/accounting/profit-loss" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-chart-pie w-5 text-blue-600 ml-2"></i>
+                                <span>قائمة الأرباح والخسائر (P&L)</span>
+                            </a>
+                            <a href="/accounting/balance-sheet" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-building-columns w-5 text-blue-600 ml-2"></i>
+                                <span>الميزانية العمومية (المركز المالي)</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- 8. الإعدادات -->
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                        <button @click="open = !open" 
+                                class="px-2.5 py-1.5 rounded flex items-center space-x-reverse space-x-1.5 transition {{ 'bg-white/20 text-white font-bold' if active_nav == 'settings' else 'text-white/90 hover:bg-white/10' }}">
+                            <span>الإعدادات</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+                        </button>
+                        <div x-cloak x-show="open" 
+                             x-transition:enter="transition ease-out duration-150"
+                             x-transition:enter-start="opacity-0 scale-95"
+                             x-transition:enter-end="opacity-100 scale-100"
+                             class="absolute right-0 mt-1 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-1 text-slate-700 z-50 text-xs font-medium">
+                            <a href="/users" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-users-gear w-5 text-slate-600 ml-2"></i>
+                                <span>فريق المحاسبين والصلاحيات</span>
+                            </a>
+                            <a href="/users/audit-trail" class="flex items-center px-4 py-2 hover:bg-purple-50 hover:text-odoo-purple transition">
+                                <i class="fa-solid fa-fingerprint w-5 text-slate-600 ml-2"></i>
+                                <span>سجل الرقابة وتتبع العمليات</span>
+                            </a>
+                        </div>
+                    </div>
+
+                </nav>
+            </div>
+
+            <!-- Left: User Profile, DB Badge, Logout (RTL End) -->
+            <div class="flex items-center space-x-reverse space-x-3 text-xs">
+                
+                <!-- Database / Server Status Indicator -->
+                <div class="hidden md:flex items-center space-x-reverse space-x-1.5 bg-black/20 px-2.5 py-1 rounded-full text-[11px] text-white/90 border border-white/10">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>النظام: متصل محلياً</span>
+                </div>
+
+                <!-- User Profile Badge & Logout -->
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <div class="text-left hidden sm:block leading-tight">
+                        <div class="font-bold text-white text-xs">{{ user.full_name_ar if user and user.full_name_ar else (user.full_name if user else 'أحمد الشريف') }}</div>
+                        <div class="text-[10px] text-amber-300 font-semibold font-mono">
+                            {% if user and user.role == 'CHIEF_ACCOUNTANT' %}
+                                رئيس الحسابات والمدير المالي
+                            {% elif user and user.role == 'INVENTORY_ACCOUNTANT' %}
+                                محاسب التكاليف والمخازن
+                            {% elif user and user.role == 'PURCHASES_ACCOUNTANT' %}
+                                محاسب المشتريات والموردين
+                            {% elif user and user.role == 'SALES_ACCOUNTANT' %}
+                                محاسب المبيعات والعملاء
+                            {% else %}
+                                محاسب معتمد
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="w-8 h-8 rounded-full bg-amber-500 border-2 border-white/30 flex items-center justify-center font-bold text-xs text-white shadow-sm">
+                        {{ user.username[:2].upper() if user else 'CA' }}
+                    </div>
+
+                    <button onclick="logout()" title="تسجيل الخروج" class="p-1.5 rounded hover:bg-white/10 text-white/80 hover:text-rose-300 transition mr-1">
+                        <i class="fa-solid fa-arrow-right-from-bracket text-sm"></i>
+                    </button>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Mobile Drawer Navigation -->
+        <div x-cloak x-show="mobileMenuOpen" 
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 -translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             class="lg:hidden bg-odoo-purpleDark border-t border-white/10 px-4 py-3 space-y-2 text-xs">
+            <a href="/dashboard" class="block py-1.5 text-white font-bold">لوحة التحكم</a>
+            <div class="border-t border-white/10 pt-2 font-bold text-amber-300">المبيعات:</div>
+            <a href="/sales/invoices" class="block py-1 pr-3 text-white/90">فواتير مبيعات الجملة</a>
+            <a href="/sales/customers" class="block py-1 pr-3 text-white/90">دليل العملاء</a>
+            <a href="/sales/aging" class="block py-1 pr-3 text-white/90">تقرير أعمار الديون</a>
+            <div class="border-t border-white/10 pt-2 font-bold text-amber-300">المشتريات والإنتاج:</div>
+            <a href="/purchases/orders" class="block py-1 pr-3 text-white/90">أوامر الشراء والشحنات</a>
+            <a href="/manufacturing/roasting" class="block py-1 pr-3 text-white/90">أوامر التحميص والهالك</a>
+            <a href="/manufacturing/recipes" class="block py-1 pr-3 text-white/90">تركيبات البن BOM</a>
+            <a href="/inventory/items" class="block py-1 pr-3 text-white/90">دليل الأصناف والمخازن</a>
+            <div class="border-t border-white/10 pt-2 font-bold text-amber-300">المالية والحسابات:</div>
+            <a href="/accounting/trial-balance" class="block py-1 pr-3 text-white/90 font-bold">ميزان المراجعة</a>
+            <a href="/accounting/coa" class="block py-1 pr-3 text-white/90">دليل الحسابات</a>
+            <a href="/treasury/receipts" class="block py-1 pr-3 text-white/90">سندات القبض والصرف</a>
+            <div class="border-t border-white/10 pt-2">
+                <a href="/users" class="block py-1 text-white/90">إدارة المستخدمين والرقابة</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Application Workspace -->
+    <main class="flex-1 overflow-y-auto p-3 sm:p-5">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Global Modal: Excel Import Engine -->
+    <div x-cloak x-show="importModal.show" 
+         class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden text-right"
+             @click.outside="if (!importModal.uploading) importModal.show = false">
+            
+            <div class="bg-odoo-purple text-white px-6 py-4 flex items-center justify-between">
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <i class="fa-solid fa-file-excel text-lg text-emerald-400"></i>
+                    <h3 class="font-bold text-base" x-text="importModal.title">استيراد بيانات من Excel</h3>
+                </div>
+                <button @click="importModal.show = false" :disabled="importModal.uploading" class="text-white/80 hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4 text-xs text-slate-700">
+                <p class="leading-relaxed">
+                    يمكنك رفع وتحديث البيانات دفعة واحدة من ملف <strong class="text-odoo-purple">Excel (.xlsx)</strong> أو <strong class="text-odoo-purple">CSV</strong>. تأكد من تطابق عناوين الأعمدة مع النموذج القياسي لتجنب الأخطاء.
+                </p>
+
+                <!-- Download Template Button -->
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between">
+                    <div class="flex items-center space-x-reverse space-x-2">
+                        <i class="fa-solid fa-download text-amber-600 text-base"></i>
+                        <div>
+                            <div class="font-bold text-amber-900">تحميل النموذج القياسي المعتمد</div>
+                            <div class="text-[11px] text-amber-700">قم بتنزيل النموذج وتعبئة بياناتك ثم إعادة رفعه</div>
+                        </div>
+                    </div>
+                    <a :href="importModal.templateUrl" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition text-[11px]">
+                        تنزيل الملف (.xlsx)
+                    </a>
+                </div>
+
+                <!-- File Picker -->
+                <div class="border-2 border-dashed border-slate-300 hover:border-odoo-purple rounded-xl p-6 text-center transition bg-slate-50">
+                    <input type="file" x-ref="importFileInput" accept=".xlsx,.xls,.csv" class="hidden" id="globalExcelUploadInput">
+                    <label for="globalExcelUploadInput" class="cursor-pointer flex flex-col items-center">
+                        <i class="fa-solid fa-cloud-arrow-up text-3xl text-odoo-purple mb-2"></i>
+                        <span class="font-bold text-slate-800 text-sm">اضغط هنا لاختيار ملف من جهازك</span>
+                        <span class="text-[11px] text-slate-500 mt-1">يدعم ملفات .xlsx و .csv</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 px-6 py-3.5 border-t border-slate-200 flex items-center justify-between">
+                <button type="button" @click="importModal.show = false" :disabled="importModal.uploading"
+                        class="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 font-bold hover:bg-slate-100 transition">
+                    إلغاء
+                </button>
+                <button type="button" @click="submitImport()" :disabled="importModal.uploading"
+                        class="px-5 py-2 odoo-btn-primary font-bold rounded-lg shadow transition flex items-center">
+                    <i class="fa-solid fa-upload ml-2" :class="importModal.uploading ? 'animate-bounce' : ''"></i>
+                    <span x-text="importModal.uploading ? 'جاري المعالجة والرفع...' : 'بدء الاستيراد الفوري'"></span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Global App Script -->
+    <script>
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/login';
+            } catch (err) {
+                window.location.href = '/login';
+            }
+        }
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

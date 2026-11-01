@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="h-full bg-slate-900 font-arabic">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل الدخول - نظام إدارة وتصنيع القهوة ERP</title>
+    
+    <!-- Google Fonts: Cairo -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        odoo: {
+                            purple: '#714B67',
+                            purpleDark: '#56384e',
+                            slate: '#1E293B'
+                        }
+                    },
+                    fontFamily: {
+                        arabic: ['Cairo', 'sans-serif'],
+                        sans: ['Cairo', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        body { font-family: 'Cairo', sans-serif; }
+    </style>
+</head>
+<body class="h-full flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-[#2A1826]" 
+      x-data="{
+          username: 'admin',
+          password: 'admin123',
+          loading: false,
+          errorMsg: '',
+          
+          async handleLogin() {
+              this.loading = true;
+              this.errorMsg = '';
+              try {
+                  const res = await fetch('/api/auth/login', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ username: this.username, password: this.password })
+                  });
+                  const data = await res.json();
+                  if (res.ok && data.success) {
+                      window.location.href = '/dashboard';
+                  } else {
+                      this.errorMsg = data.detail || 'اسم المستخدم أو كلمة المرور غير صحيحة';
+                  }
+              } catch (e) {
+                  this.errorMsg = 'فشل الاتصال بالخادم، يرجى المحاولة مرة أخرى';
+              } finally {
+                  this.loading = false;
+              }
+          },
+
+          setQuickUser(u, p) {
+              this.username = u;
+              this.password = p;
+              this.errorMsg = '';
+          }
+      }">
+
+    <div class="max-w-4xl w-full grid grid-cols-1 md:grid-cols-12 bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-800">
+        
+        <!-- Left Side: Login Form (RTL side: starts right) -->
+        <div class="md:col-span-7 p-8 sm:p-10 flex flex-col justify-between">
+            <div>
+                <!-- Brand Header -->
+                <div class="flex items-center space-x-reverse space-x-3 mb-6">
+                    <div class="w-10 h-10 rounded-xl bg-amber-600 flex items-center justify-center text-white text-xl shadow-md">
+                        <i class="fa-solid fa-mug-hot"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-black text-slate-900 tracking-wide">COFFEEROAST <span class="text-amber-600 font-bold">ERP</span></h1>
+                        <p class="text-xs text-slate-500 font-bold">نظام إدارة وتصنيع القهوة وتجارة الجملة</p>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <h2 class="text-lg font-bold text-slate-800">تسجيل الدخول للنظام</h2>
+                    <p class="text-xs text-slate-500 mt-0.5">يرجى إدخال بيانات الاعتماد المخصصة لمحاسبك المعتمد</p>
+                </div>
+
+                <!-- Error Alert -->
+                <div x-cloak x-show="errorMsg" class="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center space-x-reverse space-x-2">
+                    <i class="fa-solid fa-circle-exclamation text-rose-500 text-sm"></i>
+                    <span x-text="errorMsg"></span>
+                </div>
+
+                <!-- Form -->
+                <form @submit.prevent="handleLogin()" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">اسم المستخدم (Username):</label>
+                        <div class="relative">
+                            <input type="text" x-model="username" required 
+                                   class="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono focus:ring-2 focus:ring-odoo-purple focus:border-odoo-purple outline-none">
+                            <i class="fa-solid fa-user absolute right-3.5 top-3.5 text-slate-400 text-sm"></i>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">كلمة المرور (Password):</label>
+                        <div class="relative">
+                            <input type="password" x-model="password" required 
+                                   class="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono focus:ring-2 focus:ring-odoo-purple focus:border-odoo-purple outline-none">
+                            <i class="fa-solid fa-lock absolute right-3.5 top-3.5 text-slate-400 text-sm"></i>
+                        </div>
+                    </div>
+
+                    <button type="submit" :disabled="loading"
+                            class="w-full py-3 bg-[#714B67] hover:bg-[#56384e] text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center text-sm">
+                        <i class="fa-solid fa-arrow-right-to-bracket ml-2" :class="loading ? 'fa-spin' : ''"></i>
+                        <span x-text="loading ? 'جاري التحقق...' : 'دخول إلى النظام'"></span>
+                    </button>
+                </form>
+            </div>
+
+            <div class="pt-6 border-t border-slate-100 text-[11px] text-slate-400 text-center">
+                خادم محلي داخلي On-Premise Monolith • حماية مشددة بالصلاحيات RBAC
+            </div>
+        </div>
+
+        <!-- Right Side: Fast Switch Cards for 4 Dedicated Accountants -->
+        <div class="md:col-span-5 bg-gradient-to-br from-[#714B67] to-[#3a2034] p-8 text-white flex flex-col justify-between">
+            <div>
+                <div class="flex items-center space-x-reverse space-x-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-2">
+                    <i class="fa-solid fa-users-gear"></i>
+                    <span>فريق المحاسبين الأربعة المعتمد</span>
+                </div>
+                <h3 class="text-base font-extrabold mb-1">التبديل السريع للحسابات:</h3>
+                <p class="text-[11px] text-purple-200 mb-4">اضغط على أي حساب لتعبئة بيانات الدخول مباشرة للتجربة:</p>
+
+                <div class="space-y-2.5">
+                    <!-- 1. Chief Accountant -->
+                    <button type="button" @click="setQuickUser('admin', 'admin123')"
+                            class="w-full text-right p-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 transition flex items-center justify-between group">
+                        <div>
+                            <div class="font-bold text-xs text-amber-300">أحمد الشريف (رئيس الحسابات)</div>
+                            <div class="text-[10px] text-purple-200">القيود، دليل الحسابات، ميزان المراجعة</div>
+                        </div>
+                        <i class="fa-solid fa-chevron-left text-xs opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                    </button>
+
+                    <!-- 2. Inventory Accountant -->
+                    <button type="button" @click="setQuickUser('inv_accountant', 'inv123')"
+                            class="w-full text-right p-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 transition flex items-center justify-between group">
+                        <div>
+                            <div class="font-bold text-xs text-amber-300">خالد محمود (محاسب التكاليف)</div>
+                            <div class="text-[10px] text-purple-200">التحميص والهالك، تركيبات البن، المستودعات</div>
+                        </div>
+                        <i class="fa-solid fa-chevron-left text-xs opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                    </button>
+
+                    <!-- 3. Purchases Accountant -->
+                    <button type="button" @click="setQuickUser('purch_accountant', 'purch123')"
+                            class="w-full text-right p-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 transition flex items-center justify-between group">
+                        <div>
+                            <div class="font-bold text-xs text-amber-300">طارق فهمي (محاسب المشتريات)</div>
+                            <div class="text-[10px] text-purple-200">شحنات الاستيراد، تكاليف الشحن، الموردين</div>
+                        </div>
+                        <i class="fa-solid fa-chevron-left text-xs opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                    </button>
+
+                    <!-- 4. Sales Accountant -->
+                    <button type="button" @click="setQuickUser('sales_accountant', 'sales123')"
+                            class="w-full text-right p-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 transition flex items-center justify-between group">
+                        <div>
+                            <div class="font-bold text-xs text-amber-300">منى عبد الله (محاسب المبيعات)</div>
+                            <div class="text-[10px] text-purple-200">فواتير الجملة، المقاهي، أعمار الديون</div>
+                        </div>
+                        <i class="fa-solid fa-chevron-left text-xs opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="pt-4 text-[10px] text-purple-300/80">
+                نظام محاسبي مزدوج مطابق للمعايير الدولية للشركات الصناعية والتجارية
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>

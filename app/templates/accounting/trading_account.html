@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}حساب المتاجرة وإجمالي الربح{% endblock %}
+
+{% block content %}
+<div x-data="{
+    report: null,
+    loading: true,
+    startDate: '',
+    endDate: new Date().toISOString().split('T')[0],
+
+    async loadReport() {
+        this.loading = true;
+        try {
+            let url = '/accounting/api/trading-account';
+            if (this.startDate || this.endDate) {
+                url += `?start_date=${this.startDate}&end_date=${this.endDate}`;
+            }
+            const res = await fetch(url);
+            if (res.ok) this.report = await res.json();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    }
+}" x-init="loadReport()">
+
+    <!-- Odoo Control Panel -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+                <nav class="flex items-center space-x-reverse space-x-1.5 text-xs text-slate-500 mb-1">
+                    <a href="/dashboard" class="hover:text-odoo-purple transition">الرئيسية</a>
+                    <span>/</span>
+                    <span class="text-slate-400">التقارير الختامية</span>
+                    <span>/</span>
+                    <span class="text-odoo-purple font-bold">حساب المتاجرة (Trading Account)</span>
+                </nav>
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <h1 class="text-xl font-bold text-slate-900">حساب المتاجرة وتحديد مجمل ربح النشاط التجاري</h1>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-reverse space-x-2">
+                <button onclick="window.print()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-xs shadow-sm transition">
+                    <i class="fa-solid fa-print ml-1.5"></i> طباعة الحساب
+                </button>
+                <button @click="loadReport()" class="p-2 border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-600 transition">
+                    <i class="fa-solid fa-arrows-rotate" :class="loading ? 'fa-spin' : ''"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-3 flex items-center space-x-reverse space-x-2 text-xs">
+            <label class="font-bold text-slate-600">الفترة المالية من:</label>
+            <input type="date" x-model="startDate" class="p-1.5 border border-slate-300 rounded-lg font-mono">
+            <label class="font-bold text-slate-600">إلى:</label>
+            <input type="date" x-model="endDate" class="p-1.5 border border-slate-300 rounded-lg font-mono">
+            <button @click="loadReport()" class="px-3 py-1.5 bg-odoo-purple text-white font-bold rounded-lg">تحديث</button>
+        </div>
+    </div>
+
+    <!-- Gross Trading Profit Indicator Banner -->
+    <template x-if="report">
+        <div class="bg-gradient-to-r from-emerald-800 to-slate-900 text-white rounded-xl p-5 shadow-md mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono">
+            <div>
+                <span class="text-xs text-emerald-300 font-sans font-bold">نتيجة حساب المتاجرة التشغيلي:</span>
+                <h2 class="text-2xl font-black font-sans mt-0.5">مجمل الربح التجاري (Gross Trading Profit)</h2>
+                <p class="text-xs text-slate-300 font-sans mt-1">صافي إيرادات مبيعات القهوة بالجملة مطروحاً منها تكلفة البضاعة المباعة (COGS)</p>
+            </div>
+
+            <div class="text-left bg-white/10 px-6 py-3 rounded-xl border border-white/10">
+                <div class="text-xs font-sans text-emerald-300 font-bold">مجمل الربح المحقق:</div>
+                <div class="text-3xl font-black text-emerald-300 mt-1" x-text="'$' + report.gross_trading_profit.toLocaleString('en-US', {minimumFractionDigits: 2})"></div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Two-Column Trading Account Ledger Sheet (منه / له) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        <!-- Right Column (Debit Side: منه / التكاليف والمخزون) -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <div class="flex items-center justify-between pb-3 border-b-2 border-rose-500 mb-3">
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+                    <h3 class="font-bold text-sm text-slate-900">الجانب المدين (منه) - تكاليف المبيعات والتشغيل</h3>
+                </div>
+                <span class="text-xs font-bold text-slate-400 font-mono">Debit Side</span>
+            </div>
+
+            <div class="space-y-3 text-xs font-mono">
+                <div class="flex justify-between py-2 border-b border-slate-100">
+                    <span class="font-sans text-slate-700 font-bold">تكلفة البضاعة المباعة (COGS #5110):</span>
+                    <span class="font-extrabold text-slate-900" x-text="report ? '$' + report.cogs.toFixed(2) : '$0.00'"></span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-slate-100">
+                    <span class="font-sans text-slate-700">هالك ومخلفات التحميص (Loss Variance #5210):</span>
+                    <span class="text-slate-600" x-text="report ? '$' + report.shrinkage_variance.toFixed(2) : '$0.00'"></span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-slate-100">
+                    <span class="font-sans text-slate-700">طاقة وغاز المحامص الصناعية (#5220):</span>
+                    <span class="text-slate-600" x-text="report ? '$' + report.roasting_utilities.toFixed(2) : '$0.00'"></span>
+                </div>
+                <div class="flex justify-between py-3 font-extrabold text-sm text-slate-900 bg-slate-50 px-3 rounded-lg border border-slate-200">
+                    <span class="font-sans">إجمالي تكاليف النشاط:</span>
+                    <span x-text="report ? '$' + report.total_cogs.toFixed(2) : '$0.00'"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Left Column (Credit Side: له / إيرادات المبيعات) -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <div class="flex items-center justify-between pb-3 border-b-2 border-emerald-500 mb-3">
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                    <h3 class="font-bold text-sm text-slate-900">الجانب الدائن (له) - إيرادات مبيعات النشاط</h3>
+                </div>
+                <span class="text-xs font-bold text-slate-400 font-mono">Credit Side</span>
+            </div>
+
+            <div class="space-y-3 text-xs font-mono">
+                <div class="flex justify-between py-2 border-b border-slate-100">
+                    <span class="font-sans text-slate-700 font-bold">إيرادات مبيعات البن بالجملة (#4110):</span>
+                    <span class="font-extrabold text-slate-900" x-text="report ? '$' + report.wholesale_sales.toFixed(2) : '$0.00'"></span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-slate-100">
+                    <span class="font-sans text-slate-700">إيرادات بيع مخلفات وقشور البن (#4120):</span>
+                    <span class="text-slate-600" x-text="report ? '$' + report.byproduct_sales.toFixed(2) : '$0.00'"></span>
+                </div>
+                <div class="flex justify-between py-3 font-extrabold text-sm text-emerald-800 bg-emerald-50 px-3 rounded-lg border border-emerald-200">
+                    <span class="font-sans">إجمالي الإيرادات التجارية:</span>
+                    <span x-text="report ? '$' + report.sales_total.toFixed(2) : '$0.00'"></span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

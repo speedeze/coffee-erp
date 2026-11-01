@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}قائمة الأرباح والخسائر (Income Statement){% endblock %}
+
+{% block content %}
+<div x-data="{
+    pnl: null,
+    loading: true,
+    startDate: '',
+    endDate: new Date().toISOString().split('T')[0],
+
+    async loadPnL() {
+        this.loading = true;
+        try {
+            let url = '/accounting/api/profit-loss';
+            if (this.startDate || this.endDate) {
+                url += `?start_date=${this.startDate}&end_date=${this.endDate}`;
+            }
+            const res = await fetch(url);
+            if (res.ok) this.pnl = await res.json();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    }
+}" x-init="loadPnL()">
+
+    <!-- Odoo Control Panel -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+                <nav class="flex items-center space-x-reverse space-x-1.5 text-xs text-slate-500 mb-1">
+                    <a href="/dashboard" class="hover:text-odoo-purple transition">الرئيسية</a>
+                    <span>/</span>
+                    <span class="text-slate-400">التقارير الختامية</span>
+                    <span>/</span>
+                    <span class="text-odoo-purple font-bold">قائمة الأرباح والخسائر (P&L)</span>
+                </nav>
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <h1 class="text-xl font-bold text-slate-900">قائمة الدخل والأرباح والخسائر الشاملة</h1>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-reverse space-x-2">
+                <button onclick="window.print()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-xs shadow-sm transition">
+                    <i class="fa-solid fa-print ml-1.5"></i> طباعة القائمة
+                </button>
+                <button @click="loadPnL()" class="p-2 border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-600 transition">
+                    <i class="fa-solid fa-arrows-rotate" :class="loading ? 'fa-spin' : ''"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-3 flex items-center space-x-reverse space-x-2 text-xs">
+            <label class="font-bold text-slate-600">الفترة من:</label>
+            <input type="date" x-model="startDate" class="p-1.5 border border-slate-300 rounded-lg font-mono">
+            <label class="font-bold text-slate-600">إلى:</label>
+            <input type="date" x-model="endDate" class="p-1.5 border border-slate-300 rounded-lg font-mono">
+            <button @click="loadPnL()" class="px-3 py-1.5 bg-odoo-purple text-white font-bold rounded-lg">تحديث</button>
+        </div>
+    </div>
+
+    <!-- Net Profit Hero Card -->
+    <template x-if="pnl">
+        <div class="bg-gradient-to-r from-odoo-purple to-slate-900 text-white rounded-xl p-5 shadow-md mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono">
+            <div>
+                <span class="text-xs text-amber-300 font-sans font-bold">صافي نتيجة الأعمال التشغيلية:</span>
+                <h2 class="text-2xl font-black font-sans mt-0.5">صافي الأرباح التشغيلية (Net Operating Profit)</h2>
+                <p class="text-xs text-slate-300 font-sans mt-1">الإيرادات - تكلفة البضاعة المباعة (COGS) - المصروفات الإدارية والتشغيلية</p>
+            </div>
+
+            <div class="text-left bg-white/10 px-6 py-3 rounded-xl border border-white/10">
+                <div class="text-xs font-sans text-emerald-300 font-bold">صافي الربح:</div>
+                <div class="text-3xl font-black text-emerald-300 mt-1" x-text="'$' + pnl.net_profit.toLocaleString('en-US', {minimumFractionDigits: 2})"></div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Detailed Income Statement Sheet -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 max-w-4xl mx-auto font-mono text-xs">
+        <div class="space-y-6">
+            
+            <!-- 1. Revenues Section -->
+            <div>
+                <div class="flex justify-between pb-2 border-b-2 border-odoo-purple font-sans font-bold text-sm text-odoo-purple">
+                    <span>1. الإيرادات التشغيلية والمبيعات (Revenues):</span>
+                    <span>المبلغ ($)</span>
+                </div>
+                <div class="divide-y divide-slate-100 py-2 space-y-1">
+                    <template x-if="pnl && pnl.revenues">
+                        <template x-for="r in pnl.revenues" :key="r.code">
+                            <div class="flex justify-between py-1.5">
+                                <span class="font-sans text-slate-700" x-text="r.code + ' - ' + r.name_ar"></span>
+                                <span class="font-bold text-slate-900" x-text="'$' + r.amount.toFixed(2)"></span>
+                            </div>
+                        </template>
+                    </template>
+                    <div class="flex justify-between py-2 font-extrabold text-slate-900 bg-slate-50 px-2 rounded">
+                        <span class="font-sans">إجمالي الإيرادات (Total Revenue):</span>
+                        <span x-text="pnl ? '$' + pnl.total_revenue.toFixed(2) : '$0.00'"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Cost of Goods Sold Section -->
+            <div>
+                <div class="flex justify-between pb-2 border-b-2 border-amber-600 font-sans font-bold text-sm text-amber-900">
+                    <span>2. تكلفة البضاعة المباعة (Cost of Goods Sold - COGS):</span>
+                    <span>المبلغ ($)</span>
+                </div>
+                <div class="divide-y divide-slate-100 py-2 space-y-1">
+                    <template x-if="pnl && pnl.cogs">
+                        <template x-for="c in pnl.cogs" :key="c.code">
+                            <div class="flex justify-between py-1.5">
+                                <span class="font-sans text-slate-700" x-text="c.code + ' - ' + c.name_ar"></span>
+                                <span class="text-rose-700 font-bold" x-text="'-$' + c.amount.toFixed(2)"></span>
+                            </div>
+                        </template>
+                    </template>
+                    <div class="flex justify-between py-2 font-extrabold text-slate-900 bg-slate-50 px-2 rounded">
+                        <span class="font-sans">إجمالي تكلفة المبيعات:</span>
+                        <span class="text-rose-700" x-text="pnl ? '-$' + pnl.total_cogs.toFixed(2) : '$0.00'"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gross Profit Highlight -->
+            <div class="p-4 bg-emerald-50 rounded-xl border border-emerald-200 flex justify-between font-extrabold text-sm text-emerald-950">
+                <span class="font-sans">مجمل الربح (Gross Profit):</span>
+                <span class="text-emerald-800" x-text="pnl ? '$' + pnl.gross_profit.toFixed(2) : '$0.00'"></span>
+            </div>
+
+            <!-- 3. Operating Expenses Section -->
+            <div>
+                <div class="flex justify-between pb-2 border-b-2 border-rose-500 font-sans font-bold text-sm text-rose-900">
+                    <span>3. المصروفات التشغيلية والإدارية (Operating Expenses):</span>
+                    <span>المبلغ ($)</span>
+                </div>
+                <div class="divide-y divide-slate-100 py-2 space-y-1">
+                    <template x-if="pnl && pnl.expenses">
+                        <template x-for="ex in pnl.expenses" :key="ex.code">
+                            <div class="flex justify-between py-1.5">
+                                <span class="font-sans text-slate-700" x-text="ex.code + ' - ' + ex.name_ar"></span>
+                                <span class="text-rose-700" x-text="'-$' + ex.amount.toFixed(2)"></span>
+                            </div>
+                        </template>
+                    </template>
+                    <div class="flex justify-between py-2 font-extrabold text-slate-900 bg-slate-50 px-2 rounded">
+                        <span class="font-sans">إجمالي المصروفات التشغيلية:</span>
+                        <span class="text-rose-700" x-text="pnl ? '-$' + pnl.total_expenses.toFixed(2) : '$0.00'"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Net Operating Profit Final Result -->
+            <div class="p-5 bg-slate-900 text-white rounded-xl flex justify-between font-extrabold text-base">
+                <span class="font-sans text-amber-300">صافي الأرباح التشغيلية (Net Operating Profit):</span>
+                <span class="text-emerald-400 text-lg" x-text="pnl ? '$' + pnl.net_profit.toFixed(2) : '$0.00'"></span>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block title %}دليل الموردين وشركات الاستيراد{% endblock %}
+
+{% block content %}
+<div x-data="{
+    suppliers: [],
+    loading: true,
+    viewMode: 'list', // 'list' | 'kanban'
+    searchQuery: '',
+    countryFilter: 'ALL',
+
+    // Modal state for Create / Edit
+    modal: {
+        show: false,
+        isEdit: false,
+        id: null,
+        code: '',
+        name: '',
+        name_ar: '',
+        country: 'Brazil',
+        is_foreign: true,
+        currency: 'USD',
+        phone: '',
+        email: '',
+        address: '',
+        is_active: true,
+        saving: false
+    },
+
+    async loadSuppliers() {
+        this.loading = true;
+        try {
+            const res = await fetch('/purchases/api/suppliers');
+            if (res.ok) this.suppliers = await res.json();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    },
+
+    get filteredSuppliers() {
+        return this.suppliers.filter(s => {
+            const matchSearch = !this.searchQuery || 
+                s.code.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                s.name_ar.includes(this.searchQuery) ||
+                s.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                s.country.toLowerCase().includes(this.searchQuery.toLowerCase());
+            const matchCountry = this.countryFilter === 'ALL' || 
+                (this.countryFilter === 'FOREIGN' && s.is_foreign) ||
+                (this.countryFilter === 'LOCAL' && !s.is_foreign);
+            return matchSearch && matchCountry;
+        });
+    },
+
+    openCreate() {
+        this.modal = {
+            show: true,
+            isEdit: false,
+            id: null,
+            code: 'SUPP-' + Math.floor(100 + Math.random() * 900),
+            name: '',
+            name_ar: '',
+            country: 'Brazil',
+            is_foreign: true,
+            currency: 'USD',
+            phone: '',
+            email: '',
+            address: '',
+            is_active: true,
+            saving: false
+        };
+    },
+
+    openEdit(s) {
+        this.modal = {
+            show: true,
+            isEdit: true,
+            id: s.id,
+            code: s.code,
+            name: s.name,
+            name_ar: s.name_ar,
+            country: s.country,
+            is_foreign: s.is_foreign,
+            currency: s.currency,
+            phone: s.phone || '',
+            email: s.email || '',
+            address: s.address || '',
+            is_active: s.is_active,
+            saving: false
+        };
+    },
+
+    async saveSupplier() {
+        if (!this.modal.code || !this.modal.name_ar) {
+            showToast('يرجى إدخال كود المورد واسمه بالعربية', 'error');
+            return;
+        }
+        this.modal.saving = true;
+        try {
+            const url = this.modal.isEdit ? `/purchases/api/suppliers/${this.modal.id}` : '/purchases/api/suppliers';
+            const method = this.modal.isEdit ? 'PUT' : 'POST';
+            const res = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.modal)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(this.modal.isEdit ? 'تم تحديث المورد بنجاح' : 'تمت إضافة المورد الجديد بنجاح');
+                this.modal.show = false;
+                this.loadSuppliers();
+            } else {
+                showToast(data.detail || 'حدث خطأ أثناء الحفظ', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        } finally {
+            this.modal.saving = false;
+        }
+    },
+
+    async deleteSupplier(id, name) {
+        if (!confirm(`هل أنت متأكد من حذف أو تعطيل المورد: ${name}؟`)) return;
+        try {
+            const res = await fetch(`/purchases/api/suppliers/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(data.message || 'تم حذف المورد بنجاح');
+                this.loadSuppliers();
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        }
+    }
+}" x-init="loadSuppliers()">
+
+    <!-- Odoo Control Panel -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+                <nav class="flex items-center space-x-reverse space-x-1.5 text-xs text-slate-500 mb-1">
+                    <a href="/dashboard" class="hover:text-odoo-purple transition">الرئيسية</a>
+                    <span>/</span>
+                    <span class="text-slate-400">المشتريات والاستيراد</span>
+                    <span>/</span>
+                    <span class="text-odoo-purple font-bold">دليل الموردين</span>
+                </nav>
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <h1 class="text-xl font-bold text-slate-900">سجل موردي البن الدوليين والمحليين</h1>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-900 font-mono" x-text="filteredSuppliers.length + ' مورد'"></span>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <button @click="openCreate()" class="odoo-btn-primary px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition flex items-center">
+                    <i class="fa-solid fa-plus ml-1.5"></i>
+                    <span>مورد جديد</span>
+                </button>
+                <a href="/purchases/api/suppliers/export" class="inline-flex items-center px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition">
+                    <i class="fa-solid fa-file-excel ml-1.5"></i>
+                    <span>تصدير Excel</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="relative w-64">
+                    <input type="text" x-model="searchQuery" placeholder="بحث بالاسم، الكود، الدولة..."
+                           class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs">
+                    <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400"></i>
+                </div>
+                <select x-model="countryFilter" class="py-1.5 px-3 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white">
+                    <option value="ALL">جميع الموردين</option>
+                    <option value="FOREIGN">موردون دوليون (استيراد خارجي)</option>
+                    <option value="LOCAL">موردون محليون</option>
+                </select>
+            </div>
+
+            <div class="flex items-center border border-slate-300 rounded-lg overflow-hidden bg-slate-50 p-0.5">
+                <button @click="viewMode = 'list'" :class="viewMode === 'list' ? 'bg-white shadow-sm text-odoo-purple font-bold' : 'text-slate-500'" class="px-2.5 py-1 text-xs rounded">
+                    <i class="fa-solid fa-list ml-1"></i> عرض قائمة
+                </button>
+                <button @click="viewMode = 'kanban'" :class="viewMode === 'kanban' ? 'bg-white shadow-sm text-odoo-purple font-bold' : 'text-slate-500'" class="px-2.5 py-1 text-xs rounded">
+                    <i class="fa-solid fa-table-cells-large ml-1"></i> عرض كانبان
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. List View -->
+    <div x-show="viewMode === 'list'" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 text-slate-600 border-b border-slate-200 font-bold">
+                    <tr>
+                        <th class="py-3 px-4">كود المورد</th>
+                        <th class="py-3 px-4">اسم المورد (عربي)</th>
+                        <th class="py-3 px-4 font-mono">الاسم بالإنجليزية</th>
+                        <th class="py-3 px-4">الدولة</th>
+                        <th class="py-3 px-4 text-center">نوع المورد</th>
+                        <th class="py-3 px-4 text-center">عملة الفاتورة</th>
+                        <th class="py-3 px-4 font-mono">الهاتف</th>
+                        <th class="py-3 px-4 text-center">الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <template x-if="loading">
+                        <tr><td colspan="8" class="py-10 text-center text-slate-400 font-sans">جاري تحميل الموردين...</td></tr>
+                    </template>
+                    <template x-if="!loading && filteredSuppliers.length === 0">
+                        <tr><td colspan="8" class="py-8 text-center text-slate-400 font-sans">لا يوجد موردون يطابقون خيارات البحث</td></tr>
+                    </template>
+                    <template x-if="!loading && filteredSuppliers.length > 0">
+                        <template x-for="s in filteredSuppliers" :key="s.id">
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="py-3 px-4 font-mono font-bold text-odoo-purple" x-text="s.code"></td>
+                                <td class="py-3 px-4 font-bold text-slate-900" x-text="s.name_ar"></td>
+                                <td class="py-3 px-4 font-mono text-slate-500" x-text="s.name"></td>
+                                <td class="py-3 px-4 font-bold text-slate-700" x-text="s.country"></td>
+                                <td class="py-3 px-4 text-center">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                                          :class="s.is_foreign ? 'bg-cyan-100 text-cyan-900' : 'bg-slate-100 text-slate-700'"
+                                          x-text="s.is_foreign ? 'استيراد دولي' : 'محلي'"></span>
+                                </td>
+                                <td class="py-3 px-4 text-center font-mono font-bold" x-text="s.currency"></td>
+                                <td class="py-3 px-4 font-mono text-slate-600" x-text="s.phone || '-'"></td>
+                                <td class="py-3 px-4 text-center">
+                                    <div class="flex items-center justify-center space-x-reverse space-x-1.5">
+                                        <button @click="openEdit(s)" class="p-1.5 text-odoo-purple hover:bg-purple-50 rounded" title="تعديل"><i class="fa-solid fa-pen-to-square"></i></button>
+                                        <button @click="deleteSupplier(s.id, s.name_ar)" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded" title="حذف"><i class="fa-solid fa-trash"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 2. Kanban View -->
+    <div x-show="viewMode === 'kanban'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="s in filteredSuppliers" :key="s.id">
+            <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-mono text-xs font-bold text-odoo-purple" x-text="s.code"></span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold"
+                              :class="s.is_foreign ? 'bg-cyan-100 text-cyan-900' : 'bg-slate-100 text-slate-700'"
+                              x-text="s.is_foreign ? 'استيراد دولي' : 'محلي'"></span>
+                    </div>
+                    <h3 class="font-bold text-slate-900 text-sm" x-text="s.name_ar"></h3>
+                    <p class="font-mono text-xs text-slate-400 mb-3" x-text="s.name"></p>
+                    <div class="space-y-1 text-xs text-slate-600 border-t border-slate-100 pt-2 font-mono">
+                        <div class="flex justify-between">
+                            <span class="font-sans text-slate-400">الدولة:</span>
+                            <span class="font-bold text-slate-800" x-text="s.country"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-sans text-slate-400">العملة:</span>
+                            <span class="font-bold text-odoo-purple" x-text="s.currency"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="font-sans text-slate-400">الهاتف:</span>
+                            <span x-text="s.phone || '-'"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-[10px] text-emerald-600 font-bold">نشط</span>
+                    <div class="flex items-center space-x-reverse space-x-1">
+                        <button @click="openEdit(s)" class="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded">تعديل</button>
+                        <button @click="deleteSupplier(s.id, s.name_ar)" class="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 font-bold rounded">حذف</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Create / Edit Supplier Modal -->
+    <div x-cloak x-show="modal.show" class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden text-right" @click.outside="modal.show = false">
+            <div class="bg-odoo-purple text-white px-6 py-4 flex items-center justify-between">
+                <h3 class="font-bold text-base" x-text="modal.isEdit ? 'تعديل بيانات المورد: ' + modal.name_ar : 'تسجيل مورد جديد'"></h3>
+                <button @click="modal.show = false" class="text-white/80 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form @submit.prevent="saveSupplier()" class="p-6 space-y-4 text-xs text-slate-800">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">كود المورد:</label>
+                        <input type="text" x-model="modal.code" :disabled="modal.isEdit" required class="w-full p-2 border border-slate-300 rounded-lg font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">الدولة:</label>
+                        <input type="text" x-model="modal.country" placeholder="مثال: Brazil, Colombia" required class="w-full p-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">اسم المورد بالعربية:</label>
+                        <input type="text" x-model="modal.name_ar" placeholder="مثال: شركة سانتوس لتصدير البن" required class="w-full p-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">الاسم التجاري (EN):</label>
+                        <input type="text" x-model="modal.name" placeholder="Santos Coffee Exports" class="w-full p-2 border border-slate-300 rounded-lg font-mono">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">عملة التعامل:</label>
+                        <select x-model="modal.currency" class="w-full p-2 border border-slate-300 rounded-lg bg-white font-mono">
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="SAR">SAR (ر.س)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">الهاتف:</label>
+                        <input type="text" x-model="modal.phone" class="w-full p-2 border border-slate-300 rounded-lg font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">البريد الإلكتروني:</label>
+                        <input type="email" x-model="modal.email" class="w-full p-2 border border-slate-300 rounded-lg font-mono">
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-200 flex justify-between">
+                    <button type="button" @click="modal.show = false" class="px-4 py-2 border border-slate-300 rounded-lg font-bold">إلغاء</button>
+                    <button type="submit" :disabled="modal.saving" class="px-5 py-2 odoo-btn-primary font-bold rounded-lg shadow">حفظ المورد</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}تقرير أعمار الديون والتحصيل{% endblock %}
+
+{% block content %}
+<div x-data="{
+    report: null,
+    asOfDate: new Date().toISOString().split('T')[0],
+    loading: true,
+
+    async loadReport() {
+        this.loading = true;
+        try {
+            const res = await fetch(`/sales/api/aging?as_of_date=${this.asOfDate}`);
+            if (res.ok) this.report = await res.json();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    }
+}" x-init="loadReport()">
+
+    <!-- Odoo Control Panel -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+                <nav class="flex items-center space-x-reverse space-x-1.5 text-xs text-slate-500 mb-1">
+                    <a href="/dashboard" class="hover:text-odoo-purple transition">الرئيسية</a>
+                    <span>/</span>
+                    <span class="text-slate-400">المبيعات والجملة</span>
+                    <span>/</span>
+                    <span class="text-odoo-purple font-bold">أعمار الديون والذمم المدينة</span>
+                </nav>
+                <h1 class="text-xl font-bold text-slate-900">تقرير أعمار ديون العملاء (AR Aging Schedule)</h1>
+            </div>
+
+            <div class="flex items-center space-x-reverse space-x-2">
+                <button onclick="window.print()" class="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-xs shadow-sm transition">
+                    <i class="fa-solid fa-print ml-1.5"></i> طباعة التقرير
+                </button>
+                <button @click="loadReport()" class="p-2 border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-600 transition">
+                    <i class="fa-solid fa-arrows-rotate" :class="loading ? 'fa-spin' : ''"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-3 flex items-center space-x-reverse space-x-2 text-xs">
+            <label class="font-bold text-slate-700">احتساب أعمار الديون حتى تاريخ:</label>
+            <input type="date" x-model="asOfDate" @change="loadReport()" class="p-1.5 border border-slate-300 rounded-lg font-mono">
+            <button @click="loadReport()" class="px-3 py-1.5 bg-odoo-purple text-white font-bold rounded-lg">تحديث</button>
+        </div>
+    </div>
+
+    <!-- Aging Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-5 font-mono">
+        <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
+            <div class="text-[11px] font-sans text-slate-500 font-bold">إجمالي الذمم المطلوبة</div>
+            <div class="text-lg font-extrabold text-slate-900 mt-1" x-text="report ? '$' + report.total_receivables.toFixed(2) : '$0.00'"></div>
+        </div>
+        <div class="bg-emerald-50 p-3 rounded-xl border border-emerald-200 shadow-sm text-center">
+            <div class="text-[11px] font-sans text-emerald-800 font-bold">فترة جارية (0-30 يوم)</div>
+            <div class="text-lg font-extrabold text-emerald-700 mt-1" x-text="report ? '$' + report.total_current.toFixed(2) : '$0.00'"></div>
+        </div>
+        <div class="bg-amber-50 p-3 rounded-xl border border-amber-200 shadow-sm text-center">
+            <div class="text-[11px] font-sans text-amber-800 font-bold">متأخر (31-60 يوم)</div>
+            <div class="text-lg font-extrabold text-amber-700 mt-1" x-text="report ? '$' + report.total_31_60.toFixed(2) : '$0.00'"></div>
+        </div>
+        <div class="bg-orange-50 p-3 rounded-xl border border-orange-200 shadow-sm text-center">
+            <div class="text-[11px] font-sans text-orange-800 font-bold">حرج (61-90 يوم)</div>
+            <div class="text-lg font-extrabold text-orange-700 mt-1" x-text="report ? '$' + report.total_61_90.toFixed(2) : '$0.00'"></div>
+        </div>
+        <div class="bg-rose-50 p-3 rounded-xl border border-rose-200 shadow-sm text-center">
+            <div class="text-[11px] font-sans text-rose-800 font-bold">متعثر (+90 يوم)</div>
+            <div class="text-lg font-extrabold text-rose-700 mt-1" x-text="report ? '$' + report.total_over_90.toFixed(2) : '$0.00'"></div>
+        </div>
+    </div>
+
+    <!-- Aging Table -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+                <thead class="bg-slate-50 text-slate-700 border-b border-slate-200 font-bold">
+                    <tr>
+                        <th class="py-3 px-4">كود العميل</th>
+                        <th class="py-3 px-4">اسم العميل</th>
+                        <th class="py-3 px-4 font-mono text-left">إجمالي الرصيد</th>
+                        <th class="py-3 px-4 font-mono text-left bg-emerald-50/50 text-emerald-800">0 - 30 يوم</th>
+                        <th class="py-3 px-4 font-mono text-left bg-amber-50/50 text-amber-800">31 - 60 يوم</th>
+                        <th class="py-3 px-4 font-mono text-left bg-orange-50/50 text-orange-800">61 - 90 يوم</th>
+                        <th class="py-3 px-4 font-mono text-left bg-rose-50/50 text-rose-800">+90 يوم (متعثر)</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-mono">
+                    <template x-if="loading">
+                        <tr>
+                            <td colspan="7" class="py-10 text-center text-slate-400 font-sans">
+                                جاري احتساب شرائح أعمار الديون...
+                            </td>
+                        </tr>
+                    </template>
+
+                    <template x-if="!loading && (!report || report.customers.length === 0)">
+                        <tr>
+                            <td colspan="7" class="py-8 text-center text-slate-400 font-sans">
+                                لا توجد فواتير مبيعات آجلة مفتوحة حالياً
+                            </td>
+                        </tr>
+                    </template>
+
+                    <template x-if="!loading && report && report.customers.length > 0">
+                        <template x-for="c in report.customers" :key="c.customer_id">
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="py-3 px-4 font-bold text-odoo-purple" x-text="c.customer_code"></td>
+                                <td class="py-3 px-4 font-bold font-sans text-slate-900" x-text="c.customer_name_ar"></td>
+                                <td class="py-3 px-4 font-extrabold text-slate-900 text-left" x-text="'$' + c.total_due.toFixed(2)"></td>
+                                <td class="py-3 px-4 text-emerald-700 text-left font-semibold" x-text="c.current > 0 ? '$' + c.current.toFixed(2) : '-'"></td>
+                                <td class="py-3 px-4 text-amber-700 text-left font-semibold" x-text="c.days_31_60 > 0 ? '$' + c.days_31_60.toFixed(2) : '-'"></td>
+                                <td class="py-3 px-4 text-orange-700 text-left font-semibold" x-text="c.days_61_90 > 0 ? '$' + c.days_61_90.toFixed(2) : '-'"></td>
+                                <td class="py-3 px-4 text-rose-700 text-left font-bold" x-text="c.over_90 > 0 ? '$' + c.over_90.toFixed(2) : '-'"></td>
+                            </tr>
+                        </template>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

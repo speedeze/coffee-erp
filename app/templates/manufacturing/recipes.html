@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}تركيبات وخلطات البن BOM{% endblock %}
+
+{% block content %}
+<div x-data="{
+    recipes: [],
+    allItems: [],
+    loading: true,
+
+    // Modal state
+    modal: {
+        show: false,
+        isEdit: false,
+        id: null,
+        code: 'BOM-' + Math.floor(100 + Math.random() * 900),
+        name: '',
+        name_ar: '',
+        finished_item_id: '',
+        yield_quantity: 1.0,
+        yield_uom_id: 5,
+        description: '',
+        items: [
+            { item_id: '', quantity: 0.25, uom_id: 1, notes: 'بن مطحون' },
+            { item_id: '', quantity: 1, uom_id: 5, notes: 'كيس صمام' }
+        ],
+        saving: false
+    },
+
+    async initData() {
+        this.loading = true;
+        try {
+            const [recRes, itemRes] = await Promise.all([
+                fetch('/manufacturing/api/recipes'),
+                fetch('/inventory/api/items')
+            ]);
+            if (recRes.ok) this.recipes = await recRes.json();
+            if (itemRes.ok) this.allItems = await itemRes.json();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            this.loading = false;
+        }
+    },
+
+    addItemLine() {
+        this.modal.items.push({ item_id: '', quantity: 1, uom_id: 1, notes: '' });
+    },
+
+    removeItemLine(idx) {
+        if (this.modal.items.length > 1) this.modal.items.splice(idx, 1);
+    },
+
+    openCreate() {
+        this.modal = {
+            show: true,
+            isEdit: false,
+            id: null,
+            code: 'BOM-' + Math.floor(100 + Math.random() * 900),
+            name: '',
+            name_ar: '',
+            finished_item_id: '',
+            yield_quantity: 1.0,
+            yield_uom_id: 5,
+            description: '',
+            items: [
+                { item_id: '', quantity: 0.25, uom_id: 1, notes: 'بن مطحون' },
+                { item_id: '', quantity: 1, uom_id: 5, notes: 'كيس صمام' }
+            ],
+            saving: false
+        };
+    },
+
+    async saveRecipe() {
+        if (!this.modal.name_ar || !this.modal.finished_item_id) {
+            showToast('يرجى اختيار المنتج التام وإدخال اسم التركيبة', 'error');
+            return;
+        }
+        this.modal.saving = true;
+        try {
+            const res = await fetch('/manufacturing/api/recipes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.modal)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(`تم حفظ التركيبة ${data.name_ar} بنجاح`);
+                this.modal.show = false;
+                this.initData();
+            } else {
+                showToast(data.detail || 'حدث خطأ أثناء الحفظ', 'error');
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        } finally {
+            this.modal.saving = false;
+        }
+    },
+
+    async deleteRecipe(id, name) {
+        if (!confirm(`هل أنت متأكد من تعطيل التركيبة: ${name}؟`)) return;
+        try {
+            const res = await fetch(`/manufacturing/api/recipes/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                showToast('تم تعطيل التركيبة بنجاح');
+                this.initData();
+            }
+        } catch (e) {
+            showToast('خطأ بالاتصال بالخادم', 'error');
+        }
+    }
+}" x-init="initData()">
+
+    <!-- Odoo Control Panel -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+                <nav class="flex items-center space-x-reverse space-x-1.5 text-xs text-slate-500 mb-1">
+                    <a href="/dashboard" class="hover:text-odoo-purple transition">الرئيسية</a>
+                    <span>/</span>
+                    <span class="text-slate-400">المطحن والإنتاج</span>
+                    <span>/</span>
+                    <span class="text-odoo-purple font-bold">تركيبات وخلطات البن BOM</span>
+                </nav>
+                <div class="flex items-center space-x-reverse space-x-2">
+                    <h1 class="text-xl font-bold text-slate-900">قوائم المواد والتركيبات التصنيعية (Bill of Materials)</h1>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-mono" x-text="recipes.length + ' تركيبة'"></span>
+                </div>
+            </div>
+
+            <button @click="openCreate()" class="odoo-btn-primary px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition flex items-center">
+                <i class="fa-solid fa-plus ml-1.5"></i>
+                <span>إنشاء تركيبة BOM جديدة</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Recipes List -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <template x-for="r in recipes" :key="r.id">
+            <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="font-mono text-xs font-bold text-odoo-purple" x-text="r.code"></span>
+                    <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200"
+                          x-text="'إنتاج ' + r.yield_quantity + ' ' + (r.yield_uom ? r.yield_uom.code : 'عبوة')"></span>
+                </div>
+
+                <h3 class="font-bold text-base text-slate-900 mb-0.5" x-text="r.name_ar"></h3>
+                <p class="font-mono text-xs text-slate-400 mb-3" x-text="r.name"></p>
+
+                <!-- BOM Components Table -->
+                <div class="border border-slate-100 rounded-lg overflow-hidden mb-3">
+                    <div class="bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-600 border-b border-slate-100">
+                        مكونات العبوة الواحدة (البن، البهارات، مواد التعبئة):
+                    </div>
+                    <div class="divide-y divide-slate-100 text-xs font-mono">
+                        <template x-for="item in r.items" :key="item.id">
+                            <div class="px-3 py-1.5 flex items-center justify-between">
+                                <span class="font-sans font-medium text-slate-800" x-text="item.item ? item.item.name_ar : '-'"></span>
+                                <span class="font-bold text-odoo-purple" x-text="item.quantity + ' ' + (item.uom ? item.uom.code : '')"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
+                    <span class="text-slate-400" x-text="r.description || 'تركيبة تصنيع معتمدة'"></span>
+                    <button @click="deleteRecipe(r.id, r.name_ar)" class="text-rose-600 hover:text-rose-800 font-bold">
+                        تعطيل التركيبة
+                    </button>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Create Recipe Modal -->
+    <div x-cloak x-show="modal.show" 
+         class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden text-right"
+             @click.outside="modal.show = false">
+            <div class="bg-odoo-purple text-white px-6 py-4 flex items-center justify-between">
+                <h3 class="font-bold text-base">إنشاء تركيبة وخلطة بن جديدة (BOM)</h3>
+                <button @click="modal.show = false" class="text-white/80 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form @submit.prevent="saveRecipe()" class="p-6 space-y-4 text-xs text-slate-800">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">كود التركيبة BOM:</label>
+                        <input type="text" x-model="modal.code" required class="w-full p-2 border border-slate-300 rounded-lg font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">المنتج التام الناتج:</label>
+                        <select x-model="modal.finished_item_id" required class="w-full p-2 border border-slate-300 rounded-lg bg-white font-bold">
+                            <option value="">-- اختر المنتج النهائي --</option>
+                            <template x-for="itm in allItems.filter(i => i.category === 'FINISHED_GOODS')" :key="itm.id">
+                                <option :value="itm.id" x-text="itm.name_ar + ' (' + itm.sku + ')'"></option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">اسم التركيبة بالعربية:</label>
+                        <input type="text" x-model="modal.name_ar" placeholder="مثال: خلطة البن العربي بالهيل 250 جم" required class="w-full p-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">الاسم بالإنجليزية:</label>
+                        <input type="text" x-model="modal.name" placeholder="Example: Arabic Blend with Cardamom 250g" class="w-full p-2 border border-slate-300 rounded-lg font-mono">
+                    </div>
+                </div>
+
+                <!-- Components Table -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden mt-3">
+                    <div class="bg-slate-100 p-2.5 font-bold flex justify-between items-center">
+                        <span>المكونات المطلوبة لإنتاج عبوة واحدة:</span>
+                        <button type="button" @click="addItemLine()" class="px-2 py-1 bg-odoo-purple text-white rounded text-[11px] font-bold">
+                            + إضافة مكون
+                        </button>
+                    </div>
+                    <table class="w-full text-right text-xs">
+                        <thead class="bg-slate-50 text-slate-600">
+                            <tr>
+                                <th class="p-2">المكون (بن محمص / بهارات / عبوة)</th>
+                                <th class="p-2 w-28">الكمية</th>
+                                <th class="p-2 w-10 text-center">حذف</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <template x-for="(line, idx) in modal.items" :key="idx">
+                                <tr>
+                                    <td class="p-2">
+                                        <select x-model="line.item_id" required class="w-full p-1.5 border border-slate-300 rounded bg-white">
+                                            <option value="">-- اختر الصنف --</option>
+                                            <template x-for="itm in allItems.filter(i => i.category !== 'FINISHED_GOODS')" :key="itm.id">
+                                                <option :value="itm.id" x-text="itm.name_ar + ' (' + itm.category + ')'"></option>
+                                            </template>
+                                        </select>
+                                    </td>
+                                    <td class="p-2">
+                                        <input type="number" step="0.001" min="0.001" x-model="line.quantity" class="w-full p-1.5 border border-slate-300 rounded font-mono text-center">
+                                    </td>
+                                    <td class="p-2 text-center">
+                                        <button type="button" @click="removeItemLine(idx)" class="text-rose-500">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pt-3 border-t border-slate-200 flex justify-between">
+                    <button type="button" @click="modal.show = false" class="px-4 py-2 border border-slate-300 rounded-lg font-bold">إلغاء</button>
+                    <button type="submit" :disabled="modal.saving" class="px-5 py-2 odoo-btn-primary font-bold rounded-lg shadow">
+                        حفظ التركيبة
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
